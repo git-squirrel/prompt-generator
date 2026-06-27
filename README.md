@@ -67,6 +67,7 @@ Windows 用户也可直接双击 `start_server.bat`。
 ### 润色模板管理
 - 6 组模板：中文润色、英文润色、皮肤描述、画质描述
 - 可添加/删除自定义模板
+<img width="1578" height="1232" alt="image" src="https://github.com/user-attachments/assets/bafce7c5-ea19-46dd-8342-5d4aa5b20695" />
 
 ### AI 润色设置
 | 厂商 | 类型 | 说明 |
@@ -89,6 +90,7 @@ Windows 用户也可直接双击 `start_server.bat`。
 - 实时进度显示（步骤/时间）
 - 生图画廊：查看、下载、删除
 - 查看每张图片的提示词和种子
+<img width="1983" height="1117" alt="image" src="https://github.com/user-attachments/assets/8a1c1ca7-6ffe-4afb-ad56-271cfa0d9568" />
 
 ### 数据管理
 - 自动保存到 JSON 文件（无需数据库）
