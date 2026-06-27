@@ -216,33 +216,25 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         data_file = os.path.join(self.data_dir, filename) if self.data_dir else None
-        # For prompts.json: auto-seed from default_prompts.json on first use
-        if filename == 'prompts.json' and data_file:
-            if not os.path.exists(data_file) or os.path.getsize(data_file) < 10:
-                default_path = os.path.join(self.data_dir, 'default_prompts.json')
-                if os.path.exists(default_path):
-                    try:
-                        with open(default_path, 'r', encoding='utf-8') as f:
-                            default_data = json.load(f)
-                        os.makedirs(os.path.dirname(data_file), exist_ok=True)
-                        with open(data_file, 'w', encoding='utf-8') as f:
-                            json.dump(default_data, f, ensure_ascii=False)
-                        result = {'nsfw_prompts_data': default_data}
-                        self._merge_aux_data(result)
-                        self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
-                        return
-                    except Exception as e:
-                        print(f'  [error] Seed prompts.json failed: {e}')
         # Regular file handling
         if data_file and os.path.exists(data_file):
             try:
                 with open(data_file, 'r', encoding='utf-8') as f:
                     content = json.load(f)
-                # Ensure prompts.json is always wrapped with nsfw_prompts_data key
+                # Ensure prompts.json is always wrapped with pg_prompts_data key
                 if filename == 'prompts.json' and not isinstance(content, dict):
-                    content = {'nsfw_prompts_data': content}
-                # Merge cn_en_map and identity_en into prompts.json response
+                    content = {'pg_prompts_data': content}
+                # Merge cn_en_map and identity_en into prompts.json response (from user data or fallback)
                 if filename == 'prompts.json' and isinstance(content, dict):
+                    # Build cn_en_map from pg_prompts_data if not present
+                    if 'cn_en_map' not in content and 'pg_prompts_data' in content:
+                        cmap = {}
+                        for cat in content['pg_prompts_data']:
+                            for item in cat.get('items', []):
+                                if 'cn' in item and 'en' in item:
+                                    cmap[item['cn']] = item['en']
+                        if cmap:
+                            content['cn_en_map'] = cmap
                     self._merge_aux_data(content)
                 self.wfile.write(json.dumps(content, ensure_ascii=False).encode('utf-8'))
                 return
@@ -251,28 +243,10 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(b'{}')
 
     def _merge_aux_data(self, result):
-        """Merge cn_en_map.json, identity_en.json, and enrich_data.json into the given result dict.
-        
-        For enrich_data: prefers the enrich_data already embedded in prompts.json (result),
-        falls back to reading enrich_data.json from disk if not present.
+        """Merge enrich_data into the given result dict.
+        Prefers enrich_data already embedded in prompts.json, falls back to enrich_data.json.
         """
         if self.data_dir:
-            cn_en_path = os.path.join(self.data_dir, 'cn_en_map.json')
-            if os.path.exists(cn_en_path):
-                try:
-                    with open(cn_en_path, 'r', encoding='utf-8') as f:
-                        result['cn_en_map'] = json.load(f)
-                except Exception as e:
-                    print(f'  [error] Reading cn_en_map.json: {e}')
-            identity_en_path = os.path.join(self.data_dir, 'identity_en.json')
-            if os.path.exists(identity_en_path):
-                try:
-                    with open(identity_en_path, 'r', encoding='utf-8') as f:
-                        result['identity_en'] = json.load(f)
-                except Exception as e:
-                    print(f'  [error] Reading identity_en.json: {e}')
-            # Merge enrich_data: use what's already in prompts.json if present,
-            # otherwise fall back to enrich_data.json
             if 'enrich_data' not in result or not result['enrich_data']:
                 enrich_path = os.path.join(self.data_dir, 'enrich_data.json')
                 if os.path.exists(enrich_path):

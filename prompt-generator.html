@@ -368,7 +368,7 @@
 
 // Global vars for hardcoded data (populated from server on load)
 let CN_EN_MAP = {};
-let IDENTITY_EN = {};
+let IDENTITY_EN = {'中国':'Chinese','韩国':'Korean','日本':'Japanese','欧美':'Western','女':'Female','男':'Male'};
 let enrichCN = [];
 let enrichEN = [];
 let skinCN = [];
@@ -379,7 +379,7 @@ let qualityEN = [];
 
 let promptsEnabled = {};
 let DATA = null;
-const STORAGE_KEY = 'nsfw_prompts_data';
+const STORAGE_KEY = 'pg_prompts_data';
 
 async function init() {
   // First try to load from server backup file
@@ -554,9 +554,9 @@ function getIdentityEn() {
   } else {
     gender = document.getElementById('genderSelect').value || '';
   }
-  const r = IDENTITY_EN[region] || region;
-  const g = gender ? (IDENTITY_EN[gender] || gender) : '';
-  return `${r}, ${age} years old${g ? ', ' + g : ''}`;
+  const rf = IDENTITY_EN[region] || region;
+  const gf = gender ? (IDENTITY_EN[gender] || gender) : '';
+  return `${rf}, ${age} years old${gf ? ', ' + gf : ''}`;
 }
 
 function updateAgeDisplay() {
@@ -570,12 +570,12 @@ function updateIdentityPreview() {
 }
 
 // ===== Identity Management =====
-const IDENTITY_REGIONS_KEY = 'nsfw_identity_regions';
-const IDENTITY_GENDERS_KEY = 'nsfw_identity_genders';
-const IDENTITY_AGE_KEY = 'nsfw_identity_age';
-const IDENTITY_AGE_RANDOM_KEY = 'nsfw_identity_age_random';
-const IDENTITY_REGION_RANDOM_KEY = 'nsfw_identity_region_random';
-const IDENTITY_GENDER_RANDOM_KEY = 'nsfw_identity_gender_random';
+const IDENTITY_REGIONS_KEY = 'pg_identity_regions';
+const IDENTITY_GENDERS_KEY = 'pg_identity_genders';
+const IDENTITY_AGE_KEY = 'pg_identity_age';
+const IDENTITY_AGE_RANDOM_KEY = 'pg_identity_age_random';
+const IDENTITY_REGION_RANDOM_KEY = 'pg_identity_region_random';
+const IDENTITY_GENDER_RANDOM_KEY = 'pg_identity_gender_random';
 
 let identityRegions = [];
 let identityGenders = [];
@@ -867,7 +867,12 @@ function syncEn(cnText, usedItems) {
     en = idEn + ', ' + usedItems.map(p => p.en.split('/')[0].trim()).join(', ');
   } else {
     const segs = cnText.split(/[，,] /).map(s => s.trim()).filter(Boolean);
-    en = segs.map(s => CN_EN_MAP[s] || s).join(', ');
+    en = segs.map(s => {
+      const e = CN_EN_MAP[s];
+      if(e)return e.split('/')[0].trim();
+      if(DATA)for(const cat of DATA)for(const item of cat.items)if(item.cn===s)return item.en.split('/')[0].trim();
+      return s;
+    }).join(', ');
   }
   document.getElementById('promptEnArea').value = en;
 }
@@ -899,10 +904,13 @@ function optimizePrompt() {
   const bodyCn = bodySegments.join('，');
   const optimizedCn = base + ' ' + (identityCn ? identityCn + '，' : '') + bodyCn + '。' + skin + ' ' + qual;
 
-  // EN optimized - look up each body segment in CN_EN_MAP
+  // EN optimized - look up each body segment in CN_EN_MAP or search DATA items
   const enParts = bodySegments.map(s => {
     const e = CN_EN_MAP[s];
-    return e ? e.split('/')[0].trim() : s;
+    if(e)return e.split('/')[0].trim();
+    // Fallback: search DATA for the matching item
+    if(DATA)for(const cat of DATA)for(const item of cat.items)if(item.cn===s)return item.en.split('/')[0].trim();
+    return s;
   });
   const optimizedEn = baseEn + ' ' + idEn + ', ' + enParts.join(', ') + '. ' + skinEn + ' ' + qualEn;
 
@@ -1014,9 +1022,9 @@ function saveData() {
 }
 
 const SERVER_KEYS = {
-  prompts: ['nsfw_prompts_data','nsfw_prompts_data_enabled','nsfw_identity_regions','nsfw_identity_genders','nsfw_identity_age','nsfw_identity_age_random','nsfw_identity_region_random','nsfw_identity_gender_random','nsfw_enrichCN','nsfw_enrichEN','nsfw_skinCN','nsfw_skinEN','nsfw_qualityCN','nsfw_qualityEN'],
-  ai: ['nsfw_ai_settings','nsfw_ai_preset','nsfw_ai_history'],
-  comfy: ['nsfw_comfy_settings','nsfw_comfy_workflows','nsfw_comfy_gallery']
+  prompts: ['pg_prompts_data','pg_prompts_data_enabled','pg_identity_regions','pg_identity_genders','pg_identity_age','pg_identity_age_random','pg_identity_region_random','pg_identity_gender_random','pg_enrichCN','pg_enrichEN','pg_skinCN','pg_skinEN','pg_qualityCN','pg_qualityEN'],
+  ai: ['pg_ai_settings','pg_ai_preset','pg_ai_history'],
+  comfy: ['pg_comfy_settings','pg_comfy_workflows','pg_comfy_gallery']
 };
 
 function syncAllToServer(){
@@ -1032,12 +1040,12 @@ function syncAllToServer(){
 
 function saveEnrichData(){
   try{
-    localStorage.setItem('nsfw_enrichCN',JSON.stringify(enrichCN));
-    localStorage.setItem('nsfw_enrichEN',JSON.stringify(enrichEN));
-    localStorage.setItem('nsfw_skinCN',JSON.stringify(skinCN));
-    localStorage.setItem('nsfw_skinEN',JSON.stringify(skinEN));
-    localStorage.setItem('nsfw_qualityCN',JSON.stringify(qualityCN));
-    localStorage.setItem('nsfw_qualityEN',JSON.stringify(qualityEN));
+    localStorage.setItem('pg_enrichCN',JSON.stringify(enrichCN));
+    localStorage.setItem('pg_enrichEN',JSON.stringify(enrichEN));
+    localStorage.setItem('pg_skinCN',JSON.stringify(skinCN));
+    localStorage.setItem('pg_skinEN',JSON.stringify(skinEN));
+    localStorage.setItem('pg_qualityCN',JSON.stringify(qualityCN));
+    localStorage.setItem('pg_qualityEN',JSON.stringify(qualityEN));
   }catch(e){}
   syncAllToServer();
 }
@@ -1048,8 +1056,8 @@ async function loadDataConstants() {
   try{
     const r=await fetch('/api/load-prompts',{signal:AbortSignal.timeout(3000)});
     if(r.ok){const d=await r.json();if(d&&typeof d==='object'){
-      if(d.cn_en_map&&typeof d.cn_en_map==='object'){CN_EN_MAP=d.cn_en_map;console.log('✅ Loaded CN_EN_MAP from prompts ('+Object.keys(d.cn_en_map).length+' entries)');}
       if(d.identity_en&&typeof d.identity_en==='object'){IDENTITY_EN=d.identity_en;console.log('✅ Loaded IDENTITY_EN from prompts ('+Object.keys(d.identity_en).length+' entries)');}
+      if(d.cn_en_map&&typeof d.cn_en_map==='object'){CN_EN_MAP=d.cn_en_map;console.log('✅ Loaded CN_EN_MAP from prompts ('+Object.keys(d.cn_en_map).length+' entries)');}
       // Load enrich_data from prompts.json response
       if(d.enrich_data&&typeof d.enrich_data==='object'){
         if(d.enrich_data.enrichCN)enrichCN=d.enrich_data.enrichCN;
@@ -1064,12 +1072,12 @@ async function loadDataConstants() {
       }
       // Also try to load enrich from localStorage (user may have modified it)
       try{
-        const lsEnrich=localStorage.getItem('nsfw_enrichCN');if(lsEnrich)enrichCN=JSON.parse(lsEnrich);
-        const lsEnrichEN=localStorage.getItem('nsfw_enrichEN');if(lsEnrichEN)enrichEN=JSON.parse(lsEnrichEN);
-        const lsSkin=localStorage.getItem('nsfw_skinCN');if(lsSkin)skinCN=JSON.parse(lsSkin);
-        const lsSkinEN=localStorage.getItem('nsfw_skinEN');if(lsSkinEN)skinEN=JSON.parse(lsSkinEN);
-        const lsQual=localStorage.getItem('nsfw_qualityCN');if(lsQual)qualityCN=JSON.parse(lsQual);
-        const lsQualEN=localStorage.getItem('nsfw_qualityEN');if(lsQualEN)qualityEN=JSON.parse(lsQualEN);
+        const lsEnrich=localStorage.getItem('pg_enrichCN');if(lsEnrich)enrichCN=JSON.parse(lsEnrich);
+        const lsEnrichEN=localStorage.getItem('pg_enrichEN');if(lsEnrichEN)enrichEN=JSON.parse(lsEnrichEN);
+        const lsSkin=localStorage.getItem('pg_skinCN');if(lsSkin)skinCN=JSON.parse(lsSkin);
+        const lsSkinEN=localStorage.getItem('pg_skinEN');if(lsSkinEN)skinEN=JSON.parse(lsSkinEN);
+        const lsQual=localStorage.getItem('pg_qualityCN');if(lsQual)qualityCN=JSON.parse(lsQual);
+        const lsQualEN=localStorage.getItem('pg_qualityEN');if(lsQualEN)qualityEN=JSON.parse(lsQualEN);
       }catch(e){}
     }}
   }catch(e){}
@@ -1370,7 +1378,7 @@ toggleCat = function(name, enabled, idx) {
 };
 
 // ===== AI Configuration & Persistence =====
-const AI_KEYS = { settings:'nsfw_ai_settings', preset:'nsfw_ai_preset', history:'nsfw_ai_history' };
+const AI_KEYS = { settings:'pg_ai_settings', preset:'pg_ai_preset', history:'pg_ai_history' };
 const AI_PROVIDERS = {
   deepseek:{name:'DeepSeek',baseUrl:'https://api.deepseek.com',online:true},
   kimi:{name:'Kimi (月之暗面)',baseUrl:'https://api.moonshot.cn/v1',online:true},
@@ -1678,7 +1686,7 @@ async function aiPolish() {
 function addAiHistoryRecord(orig,pol,origEn,polEn){} // Kept for compatibility, unused
 
 // ===== ComfyUI Integration =====
-const COMFY_KEYS={settings:'nsfw_comfy_settings',workflows:'nsfw_comfy_workflows'};
+const COMFY_KEYS={settings:'pg_comfy_settings',workflows:'pg_comfy_workflows'};
 let comfySettings=null,comfyWorkflows=[],comfyConnected=false,comfyStopped=false,comfyQueueRunning=false;
 
 function defaultComfySettings(){return{url:'http://127.0.0.1:8188',language:'en',randomCount:1,batchCount:1,selectedWorkflow:-1,width:512,height:512,useProxy:false};}
@@ -1870,7 +1878,7 @@ async function sendToComfy(promptData,wfData){
 }
 
 // ===== ComfyUI Gallery =====
-const GALLERY_STORAGE_KEY = 'nsfw_comfy_gallery';
+const GALLERY_STORAGE_KEY = 'pg_comfy_gallery';
 let comfyGallery = [];
 
 function loadComfyGallery() {
@@ -2352,9 +2360,9 @@ function openComfySettings(){
 
 // ===== Data Backup =====
 const BACKUP_GROUPS = {
-  prompts: { keys: ['nsfw_prompts_data','nsfw_prompts_data_enabled','nsfw_identity_regions','nsfw_identity_genders','nsfw_identity_age','nsfw_identity_age_random','nsfw_identity_region_random','nsfw_identity_gender_random','nsfw_enrichCN','nsfw_enrichEN','nsfw_skinCN','nsfw_skinEN','nsfw_qualityCN','nsfw_qualityEN'], name: '提示词与类别' },
-  ai: { keys: ['nsfw_ai_settings','nsfw_ai_preset','nsfw_ai_history'], name: 'AI 润色设置' },
-  comfy: { keys: ['nsfw_comfy_settings','nsfw_comfy_workflows','nsfw_comfy_gallery'], name: 'ComfyUI 设置' },
+  prompts: { keys: ['pg_prompts_data','pg_prompts_data_enabled','pg_identity_regions','pg_identity_genders','pg_identity_age','pg_identity_age_random','pg_identity_region_random','pg_identity_gender_random','pg_enrichCN','pg_enrichEN','pg_skinCN','pg_skinEN','pg_qualityCN','pg_qualityEN'], name: '提示词与类别' },
+  ai: { keys: ['pg_ai_settings','pg_ai_preset','pg_ai_history'], name: 'AI 润色设置' },
+  comfy: { keys: ['pg_comfy_settings','pg_comfy_workflows','pg_comfy_gallery'], name: 'ComfyUI 设置' },
   server_config: { keys: ['port','host','comfy_url','html_file'], name: '服务配置', server: true }
 };
 
