@@ -1,5 +1,5 @@
 {
-  "data": [
+  "pg_prompts_data": [
     {
       "name": "场景 (Scenes)",
       "items": [
@@ -318,87 +318,34 @@
       ]
     }
   ],
-  "identity_en": {
-    "中国": "Chinese",
-    "韩国": "Korean",
-    "日本": "Japanese",
-    "欧美": "Western",
-    "女": "Female",
-    "男": "Male"
-  },
-  "cn_en_map": {
-    "山水": "landscape with mountains and water",
-    "城市": "cityscape",
-    "森林": "forest",
-    "海滩": "beach",
-    "日落": "sunset",
-    "星空": "starry sky",
-    "花园": "garden",
-    "瀑布": "waterfall",
-    "雪景": "snow scene",
-    "湖畔": "lakeside",
-    "草原": "grassland",
-    "沙漠": "desert",
-    "古镇": "ancient town",
-    "樱花道": "cherry blossom path",
-    "海岸线": "coastline",
-    "写实": "realistic",
-    "油画": "oil painting",
-    "水彩": "watercolor",
-    "动漫": "anime style",
-    "像素风": "pixel art",
-    "赛博朋克": "cyberpunk",
-    "蒸汽朋克": "steampunk",
-    "水墨": "ink wash painting",
-    "素描": "sketch",
-    "3D渲染": "3D render",
-    "浮世绘": "ukiyo-e",
-    "插画": "illustration",
-    "极简主义": "minimalist",
-    "抽象": "abstract",
-    "巴洛克": "baroque",
-    "自然光": "natural lighting",
-    "黄金时刻": "golden hour",
-    "逆光": "backlight",
-    "侧光": "side lighting",
-    "暖光": "warm lighting",
-    "冷光": "cool lighting",
-    "霓虹光": "neon lighting",
-    "烛光": "candlelight",
-    "月光": "moonlight",
-    "晨光": "morning light",
-    "聚光灯": "spotlight",
-    "柔光": "soft lighting",
-    "硬光": "hard lighting",
-    "渐变光": "gradient lighting",
-    "丁达尔效应": "Tyndall effect",
-    "浅景深": "shallow depth of field",
-    "广角": "wide angle",
-    "微距": "macro",
-    "长焦": "telephoto",
-    "鱼眼": "fisheye",
-    "航拍": "aerial view",
-    "特写": "close-up",
-    "全景": "panorama",
-    "慢门": "long exposure",
-    "高对比度": "high contrast",
-    "低饱和度": "low saturation",
-    "电影感": "cinematic",
-    "仰拍": "low angle shot",
-    "俯拍": "top-down view",
-    "移轴": "tilt-shift",
-    "暖色调": "warm tones",
-    "冷色调": "cool tones",
-    "黑白": "black and white",
-    "复古色": "vintage colors",
-    "糖果色": "pastel candy colors",
-    "暗黑系": "dark moody",
-    "莫兰迪色": "Morandi colors",
-    "渐变": "gradient",
-    "高饱和": "high saturation",
-    "单色": "monochrome",
-    "青橙调": "teal and orange",
-    "胶片色": "film color grading",
-    "赛博朋克色": "cyberpunk color palette"
-  }
+  "pg_enrichCN": [
+    "电影质感胶片摄影，光影美学，柔和侧逆光，复古暖调光影，明暗层次丰富。",
+    "梦幻柔焦氛围，轻盈通透的空气感，晨雾般的光线弥漫。",
+    "宏伟壮丽的自然风光，广阔景深，气势磅礴的构图。"
+  ],
+  "pg_enrichEN": [
+    "cinematic film photography, light and shadow aesthetics, soft rim lighting, retro warm tones, rich chiaroscuro.",
+    "dreamy soft focus atmosphere, ethereal and translucent airy feel, misty diffused light.",
+    "majestic natural landscape, expansive depth of field, grand and powerful composition."
+  ],
+  "pg_skinCN": [
+    "皮肤细腻真实，自然光泽，细节丰富。",
+    "肤若凝脂，瓷白透亮，柔滑细腻。",
+    "健康小麦色肌肤，阳光活力，纹理自然。"
+  ],
+  "pg_skinEN": [
+    "realistic skin texture, natural glow, rich in detail.",
+    "porcelain skin, luminous and translucent, smooth and delicate.",
+    "healthy tan skin, sun-kissed and vibrant, natural texture."
+  ],
+  "pg_qualityCN": [
+    "8K 超高清写实摄影，电影胶片级画质，极致的真实感表现，细节丰富。",
+    "4K 画质，精确光影追踪，物理级材质渲染，极致清晰。",
+    "大师级摄影作品，完美曝光，构图精妙，色彩科学。"
+  ],
+  "pg_qualityEN": [
+    "8K ultra-high-definition realistic photography, cinematic film-grade quality, extremely realistic texture, rich in detail.",
+    "4K quality, accurate ray-traced lighting, physically-based material rendering, pin-sharp clarity.",
+    "masterpiece photography, perfect exposure, exquisite composition, color-graded to perfection."
+  ]
 }
