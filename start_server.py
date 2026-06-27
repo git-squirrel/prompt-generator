@@ -19,7 +19,7 @@ CONFIG_FILE = os.path.join(os.getcwd(), 'data', 'server_config.json')
 
 DEFAULT_CONFIG = {
     "host": "127.0.0.1",
-    "port": 8000,
+    "port": 8080,
     "html_file": "",
     "comfy_url": "http://127.0.0.1:8188",
     "enable_proxy": True
