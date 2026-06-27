@@ -503,9 +503,10 @@ function toggleMgmtPanel() {
 function toggleCat(name, enabled, idx) {
   document.querySelectorAll('.cat-card')[idx].classList.toggle('enabled', enabled);
   promptsEnabled[name] = enabled;
+  saveData();
 }
 
-function getIdentityPrefix() {
+function _getIdentity(prefixEn) {
   const ageRandom = document.getElementById('ageRandomToggle') && document.getElementById('ageRandomToggle').checked;
   const regionRandom = document.getElementById('regionRandomToggle') && document.getElementById('regionRandomToggle').checked;
   const genderRandom = document.getElementById('genderRandomToggle') && document.getElementById('genderRandomToggle').checked;
@@ -527,37 +528,16 @@ function getIdentityPrefix() {
     gender = identityGenders[Math.floor(Math.random() * identityGenders.length)] || '';
   } else {
     gender = document.getElementById('genderSelect').value || '';
+  }
+  if (prefixEn) {
+    const rf = IDENTITY_EN[region] || region;
+    const gf = gender ? (IDENTITY_EN[gender] || gender) : '';
+    return `${rf}, ${age} years old${gf ? ', ' + gf : ''}`;
   }
   return `${region}，${age}岁${gender ? '，' + gender : ''}`;
 }
-
-function getIdentityEn() {
-  const ageRandom = document.getElementById('ageRandomToggle') && document.getElementById('ageRandomToggle').checked;
-  const regionRandom = document.getElementById('regionRandomToggle') && document.getElementById('regionRandomToggle').checked;
-  const genderRandom = document.getElementById('genderRandomToggle') && document.getElementById('genderRandomToggle').checked;
-  let age, region, gender;
-  if (ageRandom) {
-    const min = parseInt(document.getElementById('ageSlider').min) || 18;
-    const max = parseInt(document.getElementById('ageSlider').max) || 49;
-    age = Math.floor(Math.random() * (max - min + 1)) + min;
-  } else {
-    age = document.getElementById('ageSlider').value;
-  }
-  if (regionRandom) {
-    const regions = identityRegions.length ? identityRegions : ['中国', '韩国', '日本', '欧美'];
-    region = regions[Math.floor(Math.random() * regions.length)];
-  } else {
-    region = document.getElementById('regionSelect').value;
-  }
-  if (genderRandom) {
-    gender = identityGenders[Math.floor(Math.random() * identityGenders.length)] || '';
-  } else {
-    gender = document.getElementById('genderSelect').value || '';
-  }
-  const rf = IDENTITY_EN[region] || region;
-  const gf = gender ? (IDENTITY_EN[gender] || gender) : '';
-  return `${rf}, ${age} years old${gf ? ', ' + gf : ''}`;
-}
+function getIdentityPrefix() { return _getIdentity(false); }
+function getIdentityEn() { return _getIdentity(true); }
 
 function updateAgeDisplay() {
   document.getElementById('ageDisplay').textContent = document.getElementById('ageSlider').value;
@@ -866,7 +846,7 @@ function syncEn(cnText, usedItems) {
     const idEn = getIdentityEn();
     en = idEn + ', ' + usedItems.map(p => p.en.split('/')[0].trim()).join(', ');
   } else {
-    const segs = cnText.split(/[，,] /).map(s => s.trim()).filter(Boolean);
+    const segs = cnText.split(/[，,]/).map(s => s.trim()).filter(Boolean);
     en = segs.map(s => {
       const e = CN_EN_MAP[s];
       if(e)return e.split('/')[0].trim();
@@ -886,11 +866,11 @@ function optimizePrompt() {
   const hasSkinCN = skinCN.length > 0, hasSkinEN = skinEN.length > 0;
   const hasQualCN = qualityCN.length > 0, hasQualEN = qualityEN.length > 0;
   if (!hasSceneCN && !hasSkinCN && !hasQualCN) {
-    alert('⚠️ 所有中文描述模板都为空，请先在「管理类别与提示词」→ 润色模板中添加内容');
+    showToast('⚠️ 所有中文描述模板都为空，请先在「管理类别与提示词」→ 润色模板中添加内容', 'error');
     return;
   }
   if (!hasSceneEN && !hasSkinEN && !hasQualEN) {
-    alert('⚠️ 所有英文描述模板都为空，请先在「管理类别与提示词」→ 润色模板中添加内容');
+    showToast('⚠️ 所有英文描述模板都为空，请先在「管理类别与提示词」→ 润色模板中添加内容', 'error');
     return;
   }
 
@@ -1020,8 +1000,7 @@ let toastTimer = null;
 function showToast(msg, type) {
   const el = document.getElementById('toast');
   el.textContent = msg;
-  el.className = 'toast show';
-  el.style.color = type === 'error' ? '#ef4444' : '#34d399';
+  el.className = 'toast show ' + (type === 'error' ? 'error' : 'success');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.className = 'toast'; }, 2500);
 }
@@ -1051,15 +1030,22 @@ const SERVER_KEYS = {
   comfy: ['pg_comfy_settings','pg_comfy_workflows','pg_comfy_gallery']
 };
 
-function syncAllToServer(){
+async function syncAllToServer(){
   if(!window.location.origin||!window.location.origin.startsWith('http'))return;
-  ['prompts','ai','comfy'].forEach(cat=>{
+  const results = await Promise.allSettled(['prompts','ai','comfy'].map(async cat=>{
     const data={};
     SERVER_KEYS[cat].forEach(k=>{
       try{const v=localStorage.getItem(k);if(v)data[k]=JSON.parse(v);}catch(e){}
     });
-    if(Object.keys(data).length)fetch('/api/save-'+cat,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).catch(()=>{});
-  });
+    if(!Object.keys(data).length)return;
+    const r=await fetch('/api/save-'+cat,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if(!r.ok)throw new Error(`/server/save-${cat} 返回 ${r.status}`);
+  }));
+  const failed = results.filter(r=>r.status==='rejected');
+  if(failed.length>0){
+    console.error('❌ syncAllToServer 部分失败:', failed.map(r=>r.reason));
+    showToast(`⚠️ 同步失败 ${failed.length}/${results.length} 个文件`, 'error');
+  }
 }
 
 function saveEnrichData(){
@@ -1078,12 +1064,13 @@ function saveEnrichData(){
 async function loadDataConstants() {
   if(!window.location.origin||!window.location.origin.startsWith('http'))return;
   // Load CN_EN_MAP, IDENTITY_EN, and enrich_data from prompts.json response (merged by server)
+  let loadedFromServer = false;
   try{
     const r=await fetch('/api/load-prompts',{signal:AbortSignal.timeout(3000)});
     if(r.ok){const d=await r.json();if(d&&typeof d==='object'){
       if(d.identity_en&&typeof d.identity_en==='object'){IDENTITY_EN=d.identity_en;console.log('✅ Loaded IDENTITY_EN from prompts ('+Object.keys(d.identity_en).length+' entries)');}
       if(d.cn_en_map&&typeof d.cn_en_map==='object'){CN_EN_MAP=d.cn_en_map;console.log('✅ Loaded CN_EN_MAP from prompts ('+Object.keys(d.cn_en_map).length+' entries)');}
-      // Load enrich_data from prompts.json response
+      // Load enrich_data from prompts.json response (nested format)
       if(d.enrich_data&&typeof d.enrich_data==='object'){
         if(d.enrich_data.enrichCN)enrichCN=d.enrich_data.enrichCN;
         if(d.enrich_data.enrichEN)enrichEN=d.enrich_data.enrichEN;
@@ -1093,7 +1080,7 @@ async function loadDataConstants() {
         if(d.enrich_data.qualityEN)qualityEN=d.enrich_data.qualityEN;
         console.log('✅ Loaded enrich_data from prompts ('+Object.keys(d.enrich_data).length+' keys)');
       }
-      // 也加载服务器响应中的直接键 (pg_enrichCN 等)，作为后备
+      // Load server direct keys (pg_enrichCN etc.) — authoritative source
       const enrichDirectMap = {
         'pg_enrichCN': 'enrichCN', 'pg_enrichEN': 'enrichEN',
         'pg_skinCN': 'skinCN', 'pg_skinEN': 'skinEN',
@@ -1106,21 +1093,33 @@ async function loadDataConstants() {
           arr.push(...d[serverKey]);
         }
       }
-      // 从 localStorage 覆盖——用户最新编辑始终优先
-      try{
-        const lsEnrich=localStorage.getItem('pg_enrichCN');if(lsEnrich)enrichCN=JSON.parse(lsEnrich);
-        const lsEnrichEN=localStorage.getItem('pg_enrichEN');if(lsEnrichEN)enrichEN=JSON.parse(lsEnrichEN);
-        const lsSkin=localStorage.getItem('pg_skinCN');if(lsSkin)skinCN=JSON.parse(lsSkin);
-        const lsSkinEN=localStorage.getItem('pg_skinEN');if(lsSkinEN)skinEN=JSON.parse(lsSkinEN);
-        const lsQual=localStorage.getItem('pg_qualityCN');if(lsQual)qualityCN=JSON.parse(lsQual);
-        const lsQualEN=localStorage.getItem('pg_qualityEN');if(lsQualEN)qualityEN=JSON.parse(lsQualEN);
-        console.log('✅ Loaded enrich data from localStorage (user edits)');
-      }catch(e){}
-      // 将最终结果持久化到 localStorage，确保导出/导入一致
-      saveEnrichData();
+      loadedFromServer = true;
+      console.log('✅ Loaded enrich data from server (real-time)');
     }}
   }catch(e){}
-  console.log('ℹ️ Data constants initialized (fallback defaults used if server unavailable)');
+
+  // 仅当服务器不可用时，从 localStorage 后备加载
+  if(!loadedFromServer){
+    try{
+      const lsEnrich=localStorage.getItem('pg_enrichCN');if(lsEnrich)enrichCN=JSON.parse(lsEnrich);
+      const lsEnrichEN=localStorage.getItem('pg_enrichEN');if(lsEnrichEN)enrichEN=JSON.parse(lsEnrichEN);
+      const lsSkin=localStorage.getItem('pg_skinCN');if(lsSkin)skinCN=JSON.parse(lsSkin);
+      const lsSkinEN=localStorage.getItem('pg_skinEN');if(lsSkinEN)skinEN=JSON.parse(lsSkinEN);
+      const lsQual=localStorage.getItem('pg_qualityCN');if(lsQual)qualityCN=JSON.parse(lsQual);
+      const lsQualEN=localStorage.getItem('pg_qualityEN');if(lsQualEN)qualityEN=JSON.parse(lsQualEN);
+      console.log('ℹ️ Server unavailable, loaded enrich data from localStorage');
+    }catch(e){}
+  }
+
+  // 将最终结果持久化到 localStorage（仅本地，不触发服务器同步）
+  try{
+    localStorage.setItem('pg_enrichCN',JSON.stringify(enrichCN));
+    localStorage.setItem('pg_enrichEN',JSON.stringify(enrichEN));
+    localStorage.setItem('pg_skinCN',JSON.stringify(skinCN));
+    localStorage.setItem('pg_skinEN',JSON.stringify(skinEN));
+    localStorage.setItem('pg_qualityCN',JSON.stringify(qualityCN));
+    localStorage.setItem('pg_qualityEN',JSON.stringify(qualityEN));
+  }catch(e){}
 }
 
 const ENRICH_KEYS = new Set(['pg_enrichCN','pg_enrichEN','pg_skinCN','pg_skinEN','pg_qualityCN','pg_qualityEN']);
@@ -1135,7 +1134,7 @@ async function loadAllFromServer(){
       const data=await r.json();
       if(!data)continue;
       SERVER_KEYS[cat].forEach(k=>{
-        // 跳过润色模板键——由 loadDataConstants + localStorage 处理
+        // 跳过润色模板键——由 loadDataConstants 处理
         if(ENRICH_KEYS.has(k))return;
         if(data[k]!==undefined){localStorage.setItem(k,JSON.stringify(data[k]));total++;}
       });
@@ -1412,13 +1411,6 @@ function deletePrompt(catIdx, itemIdx) {
   renderCategories();
   showToast(`🗑️ 已删除「${cn}」`, 'success');
 }
-
-// Also save toggle state
-const _origToggleCat = toggleCat;
-toggleCat = function(name, enabled, idx) {
-  _origToggleCat(name, enabled, idx);
-  saveData();
-};
 
 // ===== AI Configuration & Persistence =====
 const AI_KEYS = { settings:'pg_ai_settings', preset:'pg_ai_preset', history:'pg_ai_history' };

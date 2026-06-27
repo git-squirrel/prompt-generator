@@ -115,8 +115,7 @@ Windows 用户也可直接双击 `start_server.bat`。
 | `prompt-generator.html` | 主页面 |
 | `start_server.py` | HTTP 服务（含 ComfyUI 代理） |
 | `start_server.bat` | Windows 快捷启动 |
-| `data/prompts.json` | 提示词数据 + 翻译映射 |
-| `data/enrich_data.json` | 润色模板 |
+| `data/prompts.json` | 提示词数据 + 翻译映射 | 润色模板 |
 | `data/server_config.json` | 服务配置（首次运行自动生成） |
 | `data/ai_settings.json` | AI 设置（首次保存自动生成） |
 | `data/comfy_settings.json` | ComfyUI 设置（首次保存自动生成） |

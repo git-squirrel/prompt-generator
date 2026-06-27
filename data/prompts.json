@@ -318,6 +318,13 @@
       ]
     }
   ],
+  "pg_prompts_data_enabled": {
+    "场景 (Scenes)": false,
+    "风格 (Style)": true,
+    "光线 (Lighting)": true,
+    "画面 (Visual)": false,
+    "色彩 (Color)": false
+  },
   "pg_enrichCN": [],
   "pg_enrichEN": [],
   "pg_skinCN": [],
