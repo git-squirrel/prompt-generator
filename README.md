@@ -41,6 +41,16 @@ Windows 用户也可直接双击 `start_server.bat`。
 3. **上传工作流**（从 ComfyUI 导出 JSON）
 4. 点击 🚀 **开始生图**
 
+## 🖼️ ComfyUI 生图说明
+**工作流必须使用 API 格式导出：**
+
+正确操作：
+1. 在 ComfyUI 搭建好工作流
+2. 点击 ComfyUI 界面右上角 **Save (API Format)** 按钮导出 JSON
+3. 在本页面上传该 JSON 文件
+❌ 不要使用普通的 Save / Export（那种格式包含界面布局信息，无法解析）
+系统会自动检测 CLIPTextEncode 节点（替换提示词）、EmptyLatentImage 节点（读取尺寸）、KSampler 节点（随机种子）。
+
 ## 🎯 功能介绍
 
 ### 提示词生成
