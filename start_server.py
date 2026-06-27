@@ -19,7 +19,7 @@ CONFIG_FILE = os.path.join(os.getcwd(), 'data', 'server_config.json')
 
 DEFAULT_CONFIG = {
     "host": "127.0.0.1",
-    "port": 8080,
+    "port": 8000,
     "html_file": "",
     "comfy_url": "http://127.0.0.1:8188",
     "enable_proxy": True
@@ -224,13 +224,13 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
                 # Ensure prompts.json is always wrapped with pg_prompts_data key
                 if filename == 'prompts.json':
                     if isinstance(content, dict) and 'data' in content:
-                        # New format: {"data":[...], "identity_en":{...}, "cn_en_map":{...}}
+                        # New format: {"data":[...], "identity_en":{...}, "cn_en_map":{...}, "enrich_data":{...}}
                         result = {'pg_prompts_data': content['data']}
                         if 'identity_en' in content: result['identity_en'] = content['identity_en']
                         if 'cn_en_map' in content: result['cn_en_map'] = content['cn_en_map']
+                        if 'enrich_data' in content: result['enrich_data'] = content['enrich_data']
                         content = result
                     elif not isinstance(content, dict):
-                        # Plain array (old format)
                         content = {'pg_prompts_data': content}
                 # Merge cn_en_map and identity_en into prompts.json response (from user data or fallback)
                 if filename == 'prompts.json' and isinstance(content, dict):
@@ -251,18 +251,8 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(b'{}')
 
     def _merge_aux_data(self, result):
-        """Merge enrich_data into the given result dict.
-        Prefers enrich_data already embedded in prompts.json, falls back to enrich_data.json.
-        """
-        if self.data_dir:
-            if 'enrich_data' not in result or not result['enrich_data']:
-                enrich_path = os.path.join(self.data_dir, 'enrich_data.json')
-                if os.path.exists(enrich_path):
-                    try:
-                        with open(enrich_path, 'r', encoding='utf-8') as f:
-                            result['enrich_data'] = json.load(f)
-                    except Exception as e:
-                        print(f'  [error] Reading enrich_data.json: {e}')
+        """enrich_data is now embedded in prompts.json."""
+        pass
 
     def _handle_load_json_file(self, filename):
         """Serve a static JSON file from data_dir directly, or return {} if missing."""
