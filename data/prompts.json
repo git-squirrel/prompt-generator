@@ -318,14 +318,8 @@
       ]
     }
   ],
-  "pg_enrichCN": [
-    "电影质感胶片摄影，光影美学，柔和侧逆光，复古暖调光影，明暗层次丰富。",
-    "宏伟壮丽的自然风光，广阔景深，气势磅礴的构图。"
-  ],
-  "pg_enrichEN": [
-    "cinematic film photography, light and shadow aesthetics, soft rim lighting, retro warm tones, rich chiaroscuro.",
-    "majestic natural landscape, expansive depth of field, grand and powerful composition."
-  ],
+  "pg_enrichCN": [],
+  "pg_enrichEN": [],
   "pg_skinCN": [],
   "pg_skinEN": [],
   "pg_qualityCN": [
