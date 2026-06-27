@@ -881,6 +881,19 @@ function optimizePrompt() {
   if (!cnText) { showToast('⚠️ 提示词为空，请先生成', 'error'); return; }
   const segments = cnText.split(/[，,]/).map(s => s.trim()).filter(Boolean);
 
+  // 场景/皮肤/画质描述全部为空时才弹窗提示
+  const hasSceneCN = enrichCN.length > 0, hasSceneEN = enrichEN.length > 0;
+  const hasSkinCN = skinCN.length > 0, hasSkinEN = skinEN.length > 0;
+  const hasQualCN = qualityCN.length > 0, hasQualEN = qualityEN.length > 0;
+  if (!hasSceneCN && !hasSkinCN && !hasQualCN) {
+    alert('⚠️ 所有中文描述模板都为空，请先在「管理类别与提示词」→ 润色模板中添加内容');
+    return;
+  }
+  if (!hasSceneEN && !hasSkinEN && !hasQualEN) {
+    alert('⚠️ 所有英文描述模板都为空，请先在「管理类别与提示词」→ 润色模板中添加内容');
+    return;
+  }
+
   // Detect identity prefix: first 1~3 segments may be region, age, gender
   let identityEnd = 0;
   if (segments.length > 0 && identityRegions.includes(segments[0])) {
@@ -892,17 +905,23 @@ function optimizePrompt() {
   const bodySegments = segments.slice(identityEnd);
   const idEn = getIdentityEn();
 
-  const base = enrichCN[Math.floor(Math.random() * enrichCN.length)];
-  const skin = skinCN[Math.floor(Math.random() * skinCN.length)];
-  const qual = qualityCN[Math.floor(Math.random() * qualityCN.length)];
-  const baseEn = enrichEN[Math.floor(Math.random() * enrichEN.length)];
-  const skinEn = skinEN[Math.floor(Math.random() * skinEN.length)];
-  const qualEn = qualityEN[Math.floor(Math.random() * qualityEN.length)];
+  // 只从非空数组中随机取
+  const base = hasSceneCN ? enrichCN[Math.floor(Math.random() * enrichCN.length)] : '';
+  const skin = hasSkinCN ? skinCN[Math.floor(Math.random() * skinCN.length)] : '';
+  const qual = hasQualCN ? qualityCN[Math.floor(Math.random() * qualityCN.length)] : '';
+  const baseEn = hasSceneEN ? enrichEN[Math.floor(Math.random() * enrichEN.length)] : '';
+  const skinEn = hasSkinEN ? skinEN[Math.floor(Math.random() * skinEN.length)] : '';
+  const qualEn = hasQualEN ? qualityEN[Math.floor(Math.random() * qualityEN.length)] : '';
 
   // CN optimized
   const identityCn = segments.slice(0, identityEnd).join('，');
   const bodyCn = bodySegments.join('，');
-  const optimizedCn = base + ' ' + (identityCn ? identityCn + '，' : '') + bodyCn + '。' + skin + ' ' + qual;
+  let optimizedCn = '';
+  if (base) optimizedCn += base + ' ';
+  if (identityCn) optimizedCn += identityCn + '，';
+  optimizedCn += bodyCn;
+  if (skin) optimizedCn += '。' + skin;
+  if (qual) optimizedCn += ' ' + qual;
 
   // EN optimized - look up each body segment in CN_EN_MAP or search DATA items
   const enParts = bodySegments.map(s => {
@@ -912,7 +931,12 @@ function optimizePrompt() {
     if(DATA)for(const cat of DATA)for(const item of cat.items)if(item.cn===s)return item.en.split('/')[0].trim();
     return s;
   });
-  const optimizedEn = baseEn + ' ' + idEn + ', ' + enParts.join(', ') + '. ' + skinEn + ' ' + qualEn;
+  let optimizedEn = '';
+  if (baseEn) optimizedEn += baseEn + ' ';
+  if (idEn) optimizedEn += idEn + ', ';
+  optimizedEn += enParts.join(', ');
+  if (skinEn) optimizedEn += '. ' + skinEn;
+  if (qualEn) optimizedEn += ' ' + qualEn;
 
   document.getElementById('promptArea').value = optimizedCn;
   document.getElementById('promptEnArea').value = optimizedEn;
@@ -1047,6 +1071,7 @@ function saveEnrichData(){
     localStorage.setItem('pg_qualityCN',JSON.stringify(qualityCN));
     localStorage.setItem('pg_qualityEN',JSON.stringify(qualityEN));
   }catch(e){}
+  // 异步同步到服务器（静默失败不影响本地数据）
   syncAllToServer();
 }
 
@@ -1067,10 +1092,21 @@ async function loadDataConstants() {
         if(d.enrich_data.qualityCN)qualityCN=d.enrich_data.qualityCN;
         if(d.enrich_data.qualityEN)qualityEN=d.enrich_data.qualityEN;
         console.log('✅ Loaded enrich_data from prompts ('+Object.keys(d.enrich_data).length+' keys)');
-        // Save to localStorage so export/import picks it up
-        saveEnrichData();
       }
-      // Also try to load enrich from localStorage (user may have modified it)
+      // 也加载服务器响应中的直接键 (pg_enrichCN 等)，作为后备
+      const enrichDirectMap = {
+        'pg_enrichCN': 'enrichCN', 'pg_enrichEN': 'enrichEN',
+        'pg_skinCN': 'skinCN', 'pg_skinEN': 'skinEN',
+        'pg_qualityCN': 'qualityCN', 'pg_qualityEN': 'qualityEN'
+      };
+      for(const [serverKey, localKey] of Object.entries(enrichDirectMap)){
+        if(d[serverKey]!==undefined){
+          const arr = getEnrichArray(localKey);
+          arr.length = 0;
+          arr.push(...d[serverKey]);
+        }
+      }
+      // 从 localStorage 覆盖——用户最新编辑始终优先
       try{
         const lsEnrich=localStorage.getItem('pg_enrichCN');if(lsEnrich)enrichCN=JSON.parse(lsEnrich);
         const lsEnrichEN=localStorage.getItem('pg_enrichEN');if(lsEnrichEN)enrichEN=JSON.parse(lsEnrichEN);
@@ -1078,11 +1114,16 @@ async function loadDataConstants() {
         const lsSkinEN=localStorage.getItem('pg_skinEN');if(lsSkinEN)skinEN=JSON.parse(lsSkinEN);
         const lsQual=localStorage.getItem('pg_qualityCN');if(lsQual)qualityCN=JSON.parse(lsQual);
         const lsQualEN=localStorage.getItem('pg_qualityEN');if(lsQualEN)qualityEN=JSON.parse(lsQualEN);
+        console.log('✅ Loaded enrich data from localStorage (user edits)');
       }catch(e){}
+      // 将最终结果持久化到 localStorage，确保导出/导入一致
+      saveEnrichData();
     }}
   }catch(e){}
   console.log('ℹ️ Data constants initialized (fallback defaults used if server unavailable)');
 }
+
+const ENRICH_KEYS = new Set(['pg_enrichCN','pg_enrichEN','pg_skinCN','pg_skinEN','pg_qualityCN','pg_qualityEN']);
 
 async function loadAllFromServer(){
   if(!window.location.origin||!window.location.origin.startsWith('http'))return false;
@@ -1094,6 +1135,8 @@ async function loadAllFromServer(){
       const data=await r.json();
       if(!data)continue;
       SERVER_KEYS[cat].forEach(k=>{
+        // 跳过润色模板键——由 loadDataConstants + localStorage 处理
+        if(ENRICH_KEYS.has(k))return;
         if(data[k]!==undefined){localStorage.setItem(k,JSON.stringify(data[k]));total++;}
       });
     }catch(e){}
