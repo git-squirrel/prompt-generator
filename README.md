@@ -1,6 +1,7 @@
 # 🎨 提示词生成器
 
 AI 提示词管理与生图一体化工具，支持随机组合、AI 润色、ComfyUI 生图。
+<img width="1712" height="1232" alt="image" src="https://github.com/user-attachments/assets/f5eeb501-35c1-4438-a02c-35943418747c" />
 
 ## ✨ 核心亮点
 
