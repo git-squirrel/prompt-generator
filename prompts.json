@@ -1,0 +1,404 @@
+{
+  "data": [
+    {
+      "name": "场景 (Scenes)",
+      "items": [
+        {
+          "cn": "山水",
+          "en": "landscape with mountains and water"
+        },
+        {
+          "cn": "城市",
+          "en": "cityscape"
+        },
+        {
+          "cn": "森林",
+          "en": "forest"
+        },
+        {
+          "cn": "海滩",
+          "en": "beach"
+        },
+        {
+          "cn": "日落",
+          "en": "sunset"
+        },
+        {
+          "cn": "星空",
+          "en": "starry sky"
+        },
+        {
+          "cn": "花园",
+          "en": "garden"
+        },
+        {
+          "cn": "瀑布",
+          "en": "waterfall"
+        },
+        {
+          "cn": "雪景",
+          "en": "snow scene"
+        },
+        {
+          "cn": "湖畔",
+          "en": "lakeside"
+        },
+        {
+          "cn": "草原",
+          "en": "grassland"
+        },
+        {
+          "cn": "沙漠",
+          "en": "desert"
+        },
+        {
+          "cn": "古镇",
+          "en": "ancient town"
+        },
+        {
+          "cn": "樱花道",
+          "en": "cherry blossom path"
+        },
+        {
+          "cn": "海岸线",
+          "en": "coastline"
+        }
+      ]
+    },
+    {
+      "name": "风格 (Style)",
+      "items": [
+        {
+          "cn": "写实",
+          "en": "realistic"
+        },
+        {
+          "cn": "油画",
+          "en": "oil painting"
+        },
+        {
+          "cn": "水彩",
+          "en": "watercolor"
+        },
+        {
+          "cn": "动漫",
+          "en": "anime style"
+        },
+        {
+          "cn": "像素风",
+          "en": "pixel art"
+        },
+        {
+          "cn": "赛博朋克",
+          "en": "cyberpunk"
+        },
+        {
+          "cn": "蒸汽朋克",
+          "en": "steampunk"
+        },
+        {
+          "cn": "水墨",
+          "en": "ink wash painting"
+        },
+        {
+          "cn": "素描",
+          "en": "sketch"
+        },
+        {
+          "cn": "3D渲染",
+          "en": "3D render"
+        },
+        {
+          "cn": "浮世绘",
+          "en": "ukiyo-e"
+        },
+        {
+          "cn": "插画",
+          "en": "illustration"
+        },
+        {
+          "cn": "极简主义",
+          "en": "minimalist"
+        },
+        {
+          "cn": "抽象",
+          "en": "abstract"
+        },
+        {
+          "cn": "巴洛克",
+          "en": "baroque"
+        }
+      ]
+    },
+    {
+      "name": "光线 (Lighting)",
+      "items": [
+        {
+          "cn": "自然光",
+          "en": "natural lighting"
+        },
+        {
+          "cn": "黄金时刻",
+          "en": "golden hour"
+        },
+        {
+          "cn": "逆光",
+          "en": "backlight"
+        },
+        {
+          "cn": "侧光",
+          "en": "side lighting"
+        },
+        {
+          "cn": "暖光",
+          "en": "warm lighting"
+        },
+        {
+          "cn": "冷光",
+          "en": "cool lighting"
+        },
+        {
+          "cn": "霓虹光",
+          "en": "neon lighting"
+        },
+        {
+          "cn": "烛光",
+          "en": "candlelight"
+        },
+        {
+          "cn": "月光",
+          "en": "moonlight"
+        },
+        {
+          "cn": "晨光",
+          "en": "morning light"
+        },
+        {
+          "cn": "聚光灯",
+          "en": "spotlight"
+        },
+        {
+          "cn": "柔光",
+          "en": "soft lighting"
+        },
+        {
+          "cn": "硬光",
+          "en": "hard lighting"
+        },
+        {
+          "cn": "渐变光",
+          "en": "gradient lighting"
+        },
+        {
+          "cn": "丁达尔效应",
+          "en": "Tyndall effect"
+        }
+      ]
+    },
+    {
+      "name": "画面 (Visual)",
+      "items": [
+        {
+          "cn": "浅景深",
+          "en": "shallow depth of field"
+        },
+        {
+          "cn": "广角",
+          "en": "wide angle"
+        },
+        {
+          "cn": "微距",
+          "en": "macro"
+        },
+        {
+          "cn": "长焦",
+          "en": "telephoto"
+        },
+        {
+          "cn": "鱼眼",
+          "en": "fisheye"
+        },
+        {
+          "cn": "航拍",
+          "en": "aerial view"
+        },
+        {
+          "cn": "特写",
+          "en": "close-up"
+        },
+        {
+          "cn": "全景",
+          "en": "panorama"
+        },
+        {
+          "cn": "慢门",
+          "en": "long exposure"
+        },
+        {
+          "cn": "高对比度",
+          "en": "high contrast"
+        },
+        {
+          "cn": "低饱和度",
+          "en": "low saturation"
+        },
+        {
+          "cn": "电影感",
+          "en": "cinematic"
+        },
+        {
+          "cn": "仰拍",
+          "en": "low angle shot"
+        },
+        {
+          "cn": "俯拍",
+          "en": "top-down view"
+        },
+        {
+          "cn": "移轴",
+          "en": "tilt-shift"
+        }
+      ]
+    },
+    {
+      "name": "色彩 (Color)",
+      "items": [
+        {
+          "cn": "暖色调",
+          "en": "warm tones"
+        },
+        {
+          "cn": "冷色调",
+          "en": "cool tones"
+        },
+        {
+          "cn": "黑白",
+          "en": "black and white"
+        },
+        {
+          "cn": "复古色",
+          "en": "vintage colors"
+        },
+        {
+          "cn": "糖果色",
+          "en": "pastel candy colors"
+        },
+        {
+          "cn": "暗黑系",
+          "en": "dark moody"
+        },
+        {
+          "cn": "莫兰迪色",
+          "en": "Morandi colors"
+        },
+        {
+          "cn": "渐变",
+          "en": "gradient"
+        },
+        {
+          "cn": "高饱和",
+          "en": "high saturation"
+        },
+        {
+          "cn": "单色",
+          "en": "monochrome"
+        },
+        {
+          "cn": "青橙调",
+          "en": "teal and orange"
+        },
+        {
+          "cn": "胶片色",
+          "en": "film color grading"
+        },
+        {
+          "cn": "赛博朋克色",
+          "en": "cyberpunk color palette"
+        }
+      ]
+    }
+  ],
+  "identity_en": {
+    "中国": "Chinese",
+    "韩国": "Korean",
+    "日本": "Japanese",
+    "欧美": "Western",
+    "女": "Female",
+    "男": "Male"
+  },
+  "cn_en_map": {
+    "山水": "landscape with mountains and water",
+    "城市": "cityscape",
+    "森林": "forest",
+    "海滩": "beach",
+    "日落": "sunset",
+    "星空": "starry sky",
+    "花园": "garden",
+    "瀑布": "waterfall",
+    "雪景": "snow scene",
+    "湖畔": "lakeside",
+    "草原": "grassland",
+    "沙漠": "desert",
+    "古镇": "ancient town",
+    "樱花道": "cherry blossom path",
+    "海岸线": "coastline",
+    "写实": "realistic",
+    "油画": "oil painting",
+    "水彩": "watercolor",
+    "动漫": "anime style",
+    "像素风": "pixel art",
+    "赛博朋克": "cyberpunk",
+    "蒸汽朋克": "steampunk",
+    "水墨": "ink wash painting",
+    "素描": "sketch",
+    "3D渲染": "3D render",
+    "浮世绘": "ukiyo-e",
+    "插画": "illustration",
+    "极简主义": "minimalist",
+    "抽象": "abstract",
+    "巴洛克": "baroque",
+    "自然光": "natural lighting",
+    "黄金时刻": "golden hour",
+    "逆光": "backlight",
+    "侧光": "side lighting",
+    "暖光": "warm lighting",
+    "冷光": "cool lighting",
+    "霓虹光": "neon lighting",
+    "烛光": "candlelight",
+    "月光": "moonlight",
+    "晨光": "morning light",
+    "聚光灯": "spotlight",
+    "柔光": "soft lighting",
+    "硬光": "hard lighting",
+    "渐变光": "gradient lighting",
+    "丁达尔效应": "Tyndall effect",
+    "浅景深": "shallow depth of field",
+    "广角": "wide angle",
+    "微距": "macro",
+    "长焦": "telephoto",
+    "鱼眼": "fisheye",
+    "航拍": "aerial view",
+    "特写": "close-up",
+    "全景": "panorama",
+    "慢门": "long exposure",
+    "高对比度": "high contrast",
+    "低饱和度": "low saturation",
+    "电影感": "cinematic",
+    "仰拍": "low angle shot",
+    "俯拍": "top-down view",
+    "移轴": "tilt-shift",
+    "暖色调": "warm tones",
+    "冷色调": "cool tones",
+    "黑白": "black and white",
+    "复古色": "vintage colors",
+    "糖果色": "pastel candy colors",
+    "暗黑系": "dark moody",
+    "莫兰迪色": "Morandi colors",
+    "渐变": "gradient",
+    "高饱和": "high saturation",
+    "单色": "monochrome",
+    "青橙调": "teal and orange",
+    "胶片色": "film color grading",
+    "赛博朋克色": "cyberpunk color palette"
+  }
+}

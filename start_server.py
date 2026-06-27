@@ -222,8 +222,16 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
                 with open(data_file, 'r', encoding='utf-8') as f:
                     content = json.load(f)
                 # Ensure prompts.json is always wrapped with pg_prompts_data key
-                if filename == 'prompts.json' and not isinstance(content, dict):
-                    content = {'pg_prompts_data': content}
+                if filename == 'prompts.json':
+                    if isinstance(content, dict) and 'data' in content:
+                        # New format: {"data":[...], "identity_en":{...}, "cn_en_map":{...}}
+                        result = {'pg_prompts_data': content['data']}
+                        if 'identity_en' in content: result['identity_en'] = content['identity_en']
+                        if 'cn_en_map' in content: result['cn_en_map'] = content['cn_en_map']
+                        content = result
+                    elif not isinstance(content, dict):
+                        # Plain array (old format)
+                        content = {'pg_prompts_data': content}
                 # Merge cn_en_map and identity_en into prompts.json response (from user data or fallback)
                 if filename == 'prompts.json' and isinstance(content, dict):
                     # Build cn_en_map from pg_prompts_data if not present
