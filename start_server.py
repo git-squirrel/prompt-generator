@@ -175,6 +175,9 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
         if self.path == '/api/save-server-config':
             self._handle_save_config()
             return
+        if self.path == '/api/shutdown':
+            self._handle_shutdown()
+            return
         self.send_response(404)
         self.end_headers()
 
@@ -203,6 +206,32 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(b'{"ok":true}')
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
+
+    def _handle_shutdown(self):
+        """Handle shutdown request: read seconds from body, trigger Windows shutdown"""
+        try:
+            content_len = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(content_len)) if content_len > 0 else {}
+            seconds = int(body.get('seconds', 60))
+            if seconds < 0: seconds = 0
+            if seconds > 3600: seconds = 3600
+            # Trigger shutdown in a separate thread so we can respond first
+            def _do_shutdown():
+                import subprocess
+                subprocess.run(['shutdown', '/s', '/t', str(seconds)], shell=True)
+            threading.Thread(target=_do_shutdown, daemon=True).start()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": True, "seconds": seconds}).encode())
+            print(f'  [shutdown] 将在 {seconds} 秒后关机')
         except Exception as e:
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')

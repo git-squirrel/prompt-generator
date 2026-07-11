@@ -247,6 +247,15 @@
     <button class="btn-comfy-go" id="comfyStartBtn" onclick="startComfyGeneration()">🚀 开始生图</button>
     <button class="btn-comfy-sm" id="comfyStopBtn" onclick="stopComfyGeneration()" style="display:none;border-color:var(--red);color:var(--red)">⏹ 中止</button>
     <span id="comfyProgress" class="comfy-progress"></span>
+    <!-- 定时关机 -->
+    <span style="font-size:11px;color:var(--text2);margin-left:6px;">⏰</span>
+    <label class="toggle" title="生图完成后自动关机">
+      <input type="checkbox" id="shutdownToggle" onchange="saveShutdownSettings()"><span class="slider"></span>
+    </label>
+    <input type="number" id="shutdownMinutes" value="5" min="0" max="120"
+      style="width:38px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:11px;text-align:center;outline:none;"
+      onchange="saveShutdownSettings()">
+    <span style="font-size:10px;color:var(--text2);white-space:nowrap;">分后关机</span>
   </div>
   <!-- Progress Bar -->
   <div class="comfy-progress-wrap" id="comfyProgressWrap">
@@ -409,6 +418,7 @@ async function init() {
   loadComfyWorkflows();
   loadComfyGallery();
   loadIdentitySettings();
+  loadShutdownUI();
   updateAiStatus();
   updateComfyStatus();
   renderCategories();
@@ -1434,10 +1444,10 @@ const AI_PROVIDERS = {
 let aiSettings = null, aiPreset = null, aiHistory = [];
 
 function defaultAiSettings() {
-  return {provider:'deepseek',baseUrl:'https://api.deepseek.com',apiKey:'',model:''};
+  return {provider:'deepseek',baseUrl:'https://api.deepseek.com',apiKey:'',model:'',polishLang:'both'};
 }
 function defaultAiPreset() {
-  return {preset:'你是一个专业的 Stable Diffusion / NovelAI 提示词优化助手。\n请根据用户提供的原始提示词，优化并扩展为更加细腻、富有画面感的英文提示词，并附带中文翻译。\n请严格按照以下格式回复：\n\n## 优化后英文提示词\n[优化后的英文提示词]\n\n## 中文翻译\n[中文翻译]'};
+  return {preset:'你是一个专业的 AI 绘画提示词生成专家。\\n用户给你一组简短的关键词组合，你需要扩展成长篇详细提示词。\\n\\n要求：\\n- 输出一段连贯的中文叙述段落，不要用逗号列表，不要用英文\\n- 包含以下维度（按需展开）：\\n  1. 场景与光线：地点、光源类型、光线氛围、曝光情况\\n  2. 拍摄手法：视角、构图、镜头焦段、镜头类型、后期风格\\n  3. 人物外貌：年龄、脸型、发型、五官细节、妆容、皮肤质感\\n  4. 人物穿着：服装款式、颜色、质地、配饰\\n  5. 姿势动作：肢体位置、姿态、动态细节\\n  6. 表情眼神：情绪状态、眼神方向、微表情\\n  7. 背景环境：周围陈设、空间感、画面景深\\n  8. 氛围情绪：整体氛围、色彩调性、叙事感\\n- 可以使用括号加权重语法，例如(女孩皮肤白皙:1.35)\\n- 长度控制在 5-8 句自然段落\\n- 保持真实摄影感，避免二次元动漫风描述\\n\\n直接输出优化后的中文提示词，不要添加额外说明。'};
 }
 
 function loadAiSettings() {
@@ -1520,6 +1530,18 @@ function openAiSettings() {
   fb.style.cssText='flex-shrink:0;padding:7px 10px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11px;white-space:nowrap;';
   fb.onclick=()=>fetchModels(uir.value,ki.value,ps.value,mi);
   mr.appendChild(mi);mr.appendChild(fb);bd.appendChild(mr);
+
+  // 润色语言选择
+  const ll=document.createElement('div');ll.className='ai-label';ll.textContent='🌐 润色语言';bd.appendChild(ll);
+  const lr=document.createElement('div');lr.style.cssText='display:flex;gap:10px;margin-bottom:10px;';
+  ['both','cn','en'].forEach(v=>{
+    const lb=document.createElement('label');lb.style.cssText='display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;';
+    const ip=document.createElement('input');ip.type='radio';ip.name='aiPolLang';ip.value=v;
+    if(v===aiSettings.polishLang)ip.checked=true;
+    ip.onchange=()=>{aiSettings.polishLang=v;};
+    lb.appendChild(ip);lb.appendChild(document.createTextNode(v==='both'?'🇨🇳+🇬🇧 中+英':v==='cn'?'🇨🇳 仅中文':'🇬🇧 仅英文'));lr.appendChild(lb);
+  });
+  bd.appendChild(lr);
 
   // Test button
   const tb=document.createElement('button');tb.id='aiTestBtn';tb.className='ai-btn-full';
@@ -1679,17 +1701,27 @@ async function aiPolish() {
     showToast('⚠️ 请先配置 AI 设置（⚙️ 设置）','error'); return;
   }
   const cn=document.getElementById('promptArea').value.trim();
-  if(!cn){showToast('⚠️ 提示词为空，请先生成或输入','error');return;}
+  const en=document.getElementById('promptEnArea').value.trim();
+  const lang=aiSettings.polishLang||'both';
+  if(lang==='cn'&&!cn){showToast('⚠️ 中文提示词为空','error');return;}
+  if(lang==='en'&&!en){showToast('⚠️ 英文提示词为空','error');return;}
+  if(!cn&&!en){showToast('⚠️ 提示词为空','error');return;}
   const btn=document.getElementById('aiPolishBtn'); const orig=btn.textContent;
   btn.textContent='⏳ AI 润色中...'; btn.disabled=true;
   try {
-    const en=document.getElementById('promptEnArea').value.trim();
     const msgs=[];
     if(aiPreset&&aiPreset.preset){
       msgs.push({role:'system',content:aiPreset.preset});
     }
-    let userContent='请优化以下提示词，保留中英文对照：\n\n中文：'+cn;
-    if(en) userContent+='\n\nEnglish: '+en;
+    let userContent='';
+    if(lang==='cn'){
+      userContent='请优化以下中文提示词，使其更细腻、富有画面感：\n\n'+cn;
+    }else if(lang==='en'){
+      userContent='Please polish and expand the following English prompt to be more detailed and vivid:\n\n'+en;
+    }else{
+      userContent='请优化以下提示词，保留中英文对照：\n\n中文：'+cn;
+      if(en) userContent+='\n\nEnglish: '+en;
+    }
     msgs.push({role:'user',content:userContent});
 
     const url=aiSettings.baseUrl.replace(/\/+$/,'')+'/chat/completions';
@@ -1699,15 +1731,12 @@ async function aiPolish() {
     const r=await fetch(url,{method:'POST',headers:h,body:JSON.stringify({model:aiSettings.model,messages:msgs,max_tokens:2048,temperature:0.7})});
     if(!r.ok){const t=await r.text().catch(()=>'');throw new Error('HTTP '+r.status+(t?': '+t.slice(0,200):''));}
     const d=await r.json();
-    // Check API error field (some providers return 200 with error)
     if(d.error){const e=typeof d.error==='string'?d.error:JSON.stringify(d.error).slice(0,300);throw new Error('API 错误: '+e);}
-    // Robust response parsing
     let reply='';
     if(d.choices&&d.choices.length>0){
       const c=d.choices[0];
       if(c.message&&(c.message.content!=null||c.message.reasoning_content!=null)){
         reply=c.message.content||'';
-        // DeepSeek 等模型可能 reasoning_content 有内容而 content 为空
         if(!reply&&typeof c.message.reasoning_content==='string'&&c.message.reasoning_content)reply=c.message.reasoning_content;
       }else if(c.message&&c.message.refusal)reply='[AI 拒绝回答] '+c.message.refusal;
       else if(c.text!=null)reply=c.text;
@@ -1715,24 +1744,21 @@ async function aiPolish() {
     if(!reply&&d.response)reply=d.response;
     if(!reply){const snippet=JSON.stringify(d).slice(0,400);throw new Error('AI 返回内容为空，响应:'+snippet);}
 
-
-    // Parse structured response
-    const cnM=reply.match(/## 中文翻译\n*([\s\S]*?)(?:\n##|$)/);
-    const enM=reply.match(/## 优化后英文提示词\n*([\s\S]*?)(?:\n##|$)/);
-    let polCn=cnM?cnM[1].trim():'', polEn=enM?enM[1].trim():'';
-
-    if(polCn)document.getElementById('promptArea').value=polCn;
-    if(polEn)document.getElementById('promptEnArea').value=polEn;
-    if(!polCn&&!polEn)document.getElementById('promptArea').value=reply;
-
-    // Save to history
-    aiHistory.unshift({timestamp:Date.now(),original:cn,polished:polCn||reply,originalEn:en,polishedEn:polEn});
-    if(aiHistory.length>20)aiHistory=aiHistory.slice(0,20);
-    saveAiHistory();
-    resizePromptAreas();
-    showToast('🤖 AI 润色完成','success');
+    if(lang==='cn'){
+      document.getElementById('promptArea').value=reply;
+    }else if(lang==='en'){
+      document.getElementById('promptEnArea').value=reply;
+    }else{
+      const cnM=reply.match(/## 中文翻译\n*([\s\S]*?)(?:\n##|$)/);
+      const enM=reply.match(/## 优化后英文提示词\n*([\s\S]*?)(?:\n##|$)/);
+      let polCn=cnM?cnM[1].trim():'', polEn=enM?enM[1].trim():'';
+      if(polCn)document.getElementById('promptArea').value=polCn;
+      if(polEn)document.getElementById('promptEnArea').value=polEn;
+      if(!polCn&&!polEn)document.getElementById('promptArea').value=reply;
+    }
+    showToast('✅ AI 润色完成','success');
   } catch(e){showToast('❌ AI 润色失败: '+e.message,'error');}
-  finally{btn.textContent=orig||'🤖 AI';btn.disabled=false;}
+  finally{btn.textContent=orig;btn.disabled=false;}
 }
 
 function addAiHistoryRecord(orig,pol,origEn,polEn){} // Kept for compatibility, unused
@@ -1741,9 +1767,28 @@ function addAiHistoryRecord(orig,pol,origEn,polEn){} // Kept for compatibility, 
 const COMFY_KEYS={settings:'pg_comfy_settings',workflows:'pg_comfy_workflows'};
 let comfySettings=null,comfyWorkflows=[],comfyConnected=false,comfyStopped=false,comfyQueueRunning=false;
 
-function defaultComfySettings(){return{url:'http://127.0.0.1:8188',language:'en',randomCount:1,batchCount:1,selectedWorkflow:-1,width:512,height:512,useProxy:false};}
+function defaultComfySettings(){return{url:'http://127.0.0.1:8188',language:'en',randomCount:1,batchCount:1,selectedWorkflow:-1,width:512,height:512,useProxy:false,autoShutdown:false,shutdownMinutes:5};}
 function loadComfySettings(){try{const s=localStorage.getItem(COMFY_KEYS.settings);comfySettings=s?JSON.parse(s):defaultComfySettings();}catch(e){comfySettings=defaultComfySettings();}}
 function saveComfySettings(){localStorage.setItem(COMFY_KEYS.settings,JSON.stringify(comfySettings));syncAllToServer();}
+function loadShutdownUI(){
+  const tog=document.getElementById('shutdownToggle');const min=document.getElementById('shutdownMinutes');
+  if(tog)tog.checked=comfySettings.autoShutdown;
+  if(min)min.value=comfySettings.shutdownMinutes;
+}
+function saveShutdownSettings(){
+  const tog=document.getElementById('shutdownToggle');const min=document.getElementById('shutdownMinutes');
+  if(tog)comfySettings.autoShutdown=tog.checked;
+  if(min)comfySettings.shutdownMinutes=parseInt(min.value)||5;
+  saveComfySettings();
+}
+function triggerShutdown(seconds){
+  const origin=window.location.origin;
+  if(origin&&origin.startsWith('http')){
+    fetch(origin+'/api/shutdown',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({seconds})})
+      .then(r=>r.json()).then(d=>showToast(`🛑 将在 ${d.seconds} 秒后关机`,'success'))
+      .catch(e=>showToast('⚠️ 关机请求失败: '+e.message,'error'));
+  } else { showToast('⚠️ 需要 HTTP 服务才支持关机','error'); }
+}
 function loadComfyWorkflows(){try{const s=localStorage.getItem(COMFY_KEYS.workflows);comfyWorkflows=s?JSON.parse(s):[];}catch(e){comfyWorkflows=[];}}
 function saveComfyWorkflows(){localStorage.setItem(COMFY_KEYS.workflows,JSON.stringify(comfyWorkflows));syncAllToServer();}
 
@@ -2141,6 +2186,64 @@ function _extractImages(historyData) {
   return images;
 }
 
+async function _prepareOnePrompt(idx, startTime, completed, total, wf) {
+  const cnArea = document.getElementById('promptArea');
+  const enArea = document.getElementById('promptEnArea');
+  const useAi = document.getElementById('aiToggle') && document.getElementById('aiToggle').checked;
+  if(comfyStopped) return {cn:'',en:''};
+  try {
+    // 1. Generate random prompt from enabled categories
+    let promptText = '';
+    const ec = DATA.filter(c => promptsEnabled[c.name]);
+    if (ec.length > 0) {
+      if (comfySettings.language === 'en') {
+        promptText = ec.map(c => {
+          const item = c.items[Math.floor(Math.random() * c.items.length)];
+          return item ? item.en.split('/')[0].trim() : '';
+        }).filter(Boolean).join(', ');
+      } else {
+        const picks = [];
+        ec.forEach(c => { if (c.items.length) picks.push(c.items[Math.floor(Math.random() * c.items.length)]); });
+        promptText = getIdentityPrefix() + '，' + picks.map(p => p.cn).join('，');
+      }
+    }
+    if (!promptText) {
+      promptText = comfySettings.language === 'en'
+        ? (enArea.value.trim() || cnArea.value.trim())
+        : cnArea.value.trim();
+      if (!promptText) { showToast('⚠️ 提示词为空', 'error'); return {cn:'',en:''}; }
+    }
+    // 2. Set prompt into textareas
+    if (comfySettings.language === 'en') {
+      enArea.value = promptText;
+      cnArea.value = promptText;
+    } else {
+      cnArea.value = promptText;
+      const enParts = ec.map(c => {
+        const item = c.items[Math.floor(Math.random() * c.items.length)];
+        return item ? item.en.split('/')[0].trim() : '';
+      }).filter(Boolean);
+      enArea.value = getIdentityEn() + ', ' + enParts.join(', ');
+    }
+    resizePromptAreas();
+    // 3. Optimize
+    _updateProgress(`✨ 优化中... (${idx+1}/${comfySettings.randomCount}组)`, completed, total, (Date.now() - startTime) / 1000);
+    optimizePrompt();
+    await new Promise(r => setTimeout(r, 50));
+    // 4. AI polish (串行等待—仅在第一次或没有前序ComfyUI运行时需要等待)
+    if (useAi && aiSettings && aiSettings.baseUrl) {
+      _updateProgress(`🤖 AI 润色中... (${idx+1}/${comfySettings.randomCount}组)`, completed, total, (Date.now() - startTime) / 1000);
+      await aiPolish();
+      await new Promise(r => setTimeout(r, 100));
+    }
+    // 5. Read final result
+    const cnFinal = comfySettings.language === 'en' ? '' : (cnArea.value.trim() || '');
+    const enFinal = comfySettings.language === 'en' ? (enArea.value.trim() || '') : enArea.value.trim();
+    const finalPromptText = comfySettings.language === 'en' ? enFinal : cnFinal;
+    return {cn: finalPromptText, en: finalPromptText === cnFinal ? enFinal : cnFinal, rawCn: cnArea.value.trim(), rawEn: enArea.value.trim()};
+  } catch(e) { console.error('_prepareOnePrompt error:', e); return {cn:'',en:''}; }
+}
+
 async function startComfyGeneration() {
   if (comfyQueueRunning) {
     showToast('⚠️ 生成中，请等待当前队列完成', 'error');
@@ -2171,72 +2274,43 @@ async function startComfyGeneration() {
   const total = comfySettings.randomCount * comfySettings.batchCount;
   let completed = 0;
   const startTime = Date.now();
-  const useAi = document.getElementById('aiToggle') && document.getElementById('aiToggle').checked;
-  const cnArea = document.getElementById('promptArea');
-  const enArea = document.getElementById('promptEnArea');
+  const steps = _getWorkflowSteps(wf);
+  let nextPrompt = null; // Pre-polished prompt for the next iteration
+
   try {
+    // === 预准备第 0 个提示词（必须等待） ===
+    _updateProgress(`⏳ 准备第1组提示词...`, 0, total, 0);
+    nextPrompt = await _prepareOnePrompt(0, startTime, completed, total, wf);
+    if (!nextPrompt.cn) { throw new Error('提示词准备失败'); }
+
     for (let p = 0; p < comfySettings.randomCount; p++) {
       if(comfyStopped)break;
-      // 1. Generate random prompt from enabled categories
-      let promptText = '';
-      const ec = DATA.filter(c => promptsEnabled[c.name]);
-      if (ec.length > 0) {
-        if (comfySettings.language === 'en') {
-          promptText = ec.map(c => {
-            const item = c.items[Math.floor(Math.random() * c.items.length)];
-            return item ? item.en.split('/')[0].trim() : '';
-          }).filter(Boolean).join(', ');
-        } else {
-          const picks = [];
-          ec.forEach(c => { if (c.items.length) picks.push(c.items[Math.floor(Math.random() * c.items.length)]); });
-          promptText = getIdentityPrefix() + '，' + picks.map(p => p.cn).join('，');
-        }
+
+      const currentPrompt = nextPrompt; // 使用已润色好的提示词
+      nextPrompt = null;
+
+      // === 异步：准备下一个提示词（同时开始）===
+      let prepPromise = null;
+      if (p + 1 < comfySettings.randomCount) {
+        prepPromise = _prepareOnePrompt(p + 1, startTime, completed, total, wf);
       }
-      if (!promptText) {
-        promptText = comfySettings.language === 'en'
-          ? (enArea.value.trim() || cnArea.value.trim())
-          : cnArea.value.trim();
-        if (!promptText) { showToast('⚠️ 提示词为空', 'error'); break; }
-      }
-      // 2. Set prompt into textareas for optimize/AI polish
-      if (comfySettings.language === 'en') {
-        enArea.value = promptText;
-        cnArea.value = promptText;
-      } else {
-        cnArea.value = promptText;
-        const enParts = ec.map(c => {
-          const item = c.items[Math.floor(Math.random() * c.items.length)];
-          return item ? item.en.split('/')[0].trim() : '';
-        }).filter(Boolean);
-        enArea.value = getIdentityEn() + ', ' + enParts.join(', ');
-      }
-      resizePromptAreas();
-      // 3. Apply template optimize
-      _updateProgress(`✨ 优化中... (${p+1}/${comfySettings.randomCount}组)`, completed, total, (Date.now() - startTime) / 1000);
-      optimizePrompt();
-      await new Promise(r => setTimeout(r, 50));
-      // 4. AI polish if toggle ON
-      if (useAi && aiSettings && aiSettings.baseUrl) {
-        _updateProgress(`🤖 AI 润色中... (${p+1}/${comfySettings.randomCount}组)`, completed, total, (Date.now() - startTime) / 1000);
-        await aiPolish();
-        await new Promise(r => setTimeout(r, 100));
-      }
-      // 5. Read final prompt
-      const finalPrompt = comfySettings.language === 'en'
-        ? enArea.value.trim() || cnArea.value.trim()
-        : cnArea.value.trim();
-      if (!finalPrompt) { showToast('⚠️ 优化后提示词为空，跳过', 'error'); continue; }
-      // 6. Send batches to ComfyUI
-      const steps = _getWorkflowSteps(wf);
+
+      // === 发送当前提示词到 ComfyUI ===
+      const finalPrompt = comfySettings.language === 'en' ? currentPrompt.en : currentPrompt.cn;
+      if (!finalPrompt) { showToast('⚠️ 提示词为空，跳过', 'error'); continue; }
+      const finalPromptEn = comfySettings.language === 'en' ? '' : currentPrompt.en;
+
+      // 批量发送到 ComfyUI
+      const batchResults = [];
       for (let b = 0; b < comfySettings.batchCount; b++) {
         if(comfyStopped){completed+=comfySettings.batchCount-b;break;}
         completed++;
         const elapsed = (Date.now() - startTime) / 1000;
-        _updateProgress(`🚀 第 ${completed}/${total}`, completed, total, elapsed);
+        _updateProgress(`🚀 发送第 ${completed}/${total}`, completed, total, elapsed);
         const seed = Math.floor(Math.random() * 2147483647) + 1;
         _updateProgress(`🎲 种子 ${seed} (${completed}/${total})`, completed, total, elapsed);
         const pd = workflowToPrompt(wf, finalPrompt, comfySettings.width, comfySettings.height, seed);
-        // Second pass: ensure ALL seed inputs are set
+        // Seed injection
         let seedCount=0;
         Object.keys(pd).forEach(nid=>{
           const ni=pd[nid]&&pd[nid].inputs;
@@ -2244,26 +2318,45 @@ async function startComfyGeneration() {
           if('seed'in ni){ni.seed=seed;seedCount++;}
           if('noise_seed'in ni){ni.noise_seed=seed;seedCount++;}
         });
-        // If no seed nodes found, print debug
         if(!seedCount)_updateProgress(`⚠️ 未找到seed节点 (${completed}/${total})`, completed, total, elapsed);
-        // Send
-        _updateProgress(`📤 发送中... (${completed}/${total})`, completed, total, elapsed);
+        // Send to ComfyUI
+        _updateProgress(`📤 发送中... (${completed}/${total})`, completed, total, (Date.now() - startTime) / 1000);
         const result = await sendToComfy(pd, wf);
-        // Poll with progress
-        _updateProgress(`🎨 生成中... 0/${steps}步`, completed, total, elapsed);
-        const historyData = await _pollComfyUI(result.prompt_id, steps);
-        // Extract and display images
+        batchResults.push({result, seed, prompt: finalPrompt, promptEn: finalPromptEn});
+      }
+
+      // === 等待所有批次完成 ===
+      for (let b = 0; b < batchResults.length; b++) {
+        if(comfyStopped)break;
+        const br = batchResults[b];
+        const elapsed = (Date.now() - startTime) / 1000;
+        _updateProgress(`🎨 生成中... 0/${steps}步 (${completed-batchResults.length+b+1}/${total})`, completed, total, elapsed);
+        const historyData = await _pollComfyUI(br.result.prompt_id, steps);
         const imgs = _extractImages(historyData);
         for (const imgUrl of imgs) {
-          addToComfyGallery(imgUrl, completed, finalPrompt, seed);
+          addToComfyGallery(imgUrl, completed, br.prompt, br.seed);
         }
-        _updateProgress(`✅ 已完成 ${completed}/${total}`, completed, total, (Date.now() - startTime) / 1000);
-        await new Promise(r => setTimeout(r, 200));
+      }
+      _updateProgress(`✅ 已完成 ${completed}/${total}`, completed, total, (Date.now() - startTime) / 1000);
+
+      // === 等待下一个提示词准备完成（它应该已经在后台完成了！） ===
+      if (prepPromise) {
+        nextPrompt = await prepPromise;
+        if (!nextPrompt.cn) { showToast('⚠️ 提示词准备失败', 'error'); break; }
       }
     }
+
     const finalElapsed = (Date.now() - startTime) / 1000;
     _updateProgress(`✅ 全部完成! ${completed}/${total}`, completed, total, finalElapsed);
     showToast(`🎉 生图完成！共 ${completed} 张`, 'success');
+
+    // === 定时关机 ===
+    if (comfySettings.autoShutdown && comfySettings.shutdownMinutes > 0) {
+      const secs = comfySettings.shutdownMinutes * 60;
+      showToast(`🛑 将在 ${comfySettings.shutdownMinutes} 分钟后关机`, 'success');
+      triggerShutdown(secs);
+    }
+
   } catch(e) {
     showToast('❌ 生图失败: ' + e.message.slice(0, 150), 'error');
     _updateProgress(`❌ ${e.message.slice(0, 50)}`, completed, total, (Date.now() - startTime) / 1000);
