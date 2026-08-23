@@ -137,7 +137,15 @@ function updateAgeDisplay() {
 
 function updateIdentityPreview() {
   const preview = document.getElementById('identityPreview');
-  if (preview) preview.textContent = getIdentityPrefix();
+  if (!preview) return;
+  // Read checkbox states from DOM for live preview
+  const ageRandomToggle = document.getElementById('ageRandomToggle');
+  const regionRandomToggle = document.getElementById('regionRandomToggle');
+  const genderRandomToggle = document.getElementById('genderRandomToggle');
+  if (ageRandomToggle) identityAgeRandom = ageRandomToggle.checked;
+  if (regionRandomToggle) identityRegionRandom = regionRandomToggle.checked;
+  if (genderRandomToggle) identityGenderRandom = genderRandomToggle.checked;
+  preview.textContent = getIdentityPrefix();
 }
 
 // ============================================================
@@ -154,6 +162,14 @@ function loadIdentitySettings() {
 }
 
 function saveIdentitySettings() {
+  // Read checkbox states from DOM and sync to variables before saving
+  const ageRandomToggle = document.getElementById('ageRandomToggle');
+  const regionRandomToggle = document.getElementById('regionRandomToggle');
+  const genderRandomToggle = document.getElementById('genderRandomToggle');
+  if (ageRandomToggle) identityAgeRandom = ageRandomToggle.checked;
+  if (regionRandomToggle) identityRegionRandom = regionRandomToggle.checked;
+  if (genderRandomToggle) identityGenderRandom = genderRandomToggle.checked;
+
   storage.set('identity_regions', identityRegions);
   storage.set('identity_genders', identityGenders);
   storage.set('identity_age', identityAge);
@@ -161,6 +177,7 @@ function saveIdentitySettings() {
   storage.setBool('identity_region_random', identityRegionRandom);
   storage.setBool('identity_gender_random', identityGenderRandom);
   syncAllToServer();
+  updateIdentityPreview();
 }
 
 function renderIdentityBar() {
@@ -401,10 +418,20 @@ function deleteEnrichItem(key, idx) {
 // ============================================================
 
 function randomPrompt() {
-  const enabledCats = DATA.filter(c => promptsEnabled[c.name]);
+  // Sync random-toggle states from DOM so freshly clicked checkboxes take effect immediately
+  const ageRT = document.getElementById('ageRandomToggle');
+  const regionRT = document.getElementById('regionRandomToggle');
+  const genderRT = document.getElementById('genderRandomToggle');
+  if (ageRT) identityAgeRandom = ageRT.checked;
+  if (regionRT) identityRegionRandom = regionRT.checked;
+  if (genderRT) identityGenderRandom = genderRT.checked;
+
+  // Treat undefined as enabled, consistent with renderCategories()
+  const enabledCats = DATA.filter(c => promptsEnabled[c.name] !== false);
   if (enabledCats.length === 0) { showToast('⚠️ 请至少开启一个类别', 'error'); return; }
   const picks = [];
   enabledCats.forEach(cat => { if (cat.items.length) picks.push(cat.items[Math.floor(Math.random() * cat.items.length)]); });
+  if (!picks.length) { showToast('⚠️ 已开启的类别中没有词条', 'error'); return; }
   const identity = getIdentityPrefix();
   const cn = identity + '，' + picks.map(p => p.cn).join('，');
   setPrompt(cn, picks);
@@ -2018,15 +2045,14 @@ async function _prepareOnePrompt(idx, startTime, completed, total, wf) {
   if (comfyStopped) return { cn: '', en: '' };
   try {
     let promptText = '';
-    const ec = DATA.filter(c => promptsEnabled[c.name]);
+    let picks = [];
+    // Treat undefined as enabled, consistent with renderCategories()
+    const ec = DATA.filter(c => promptsEnabled[c.name] !== false);
     if (ec.length > 0) {
       if (comfySettings.language === 'en') {
-        promptText = ec.map(c => {
-          const item = c.items[Math.floor(Math.random() * c.items.length)];
-          return item ? item.en.split('/')[0].trim() : '';
-        }).filter(Boolean).join(', ');
+        ec.forEach(c => { if (c.items.length) picks.push(c.items[Math.floor(Math.random() * c.items.length)]); });
+        promptText = picks.map(p => p.en.split('/')[0].trim()).filter(Boolean).join(', ');
       } else {
-        const picks = [];
         ec.forEach(c => { if (c.items.length) picks.push(c.items[Math.floor(Math.random() * c.items.length)]); });
         promptText = getIdentityPrefix() + '，' + picks.map(p => p.cn).join('，');
       }
@@ -2042,11 +2068,13 @@ async function _prepareOnePrompt(idx, startTime, completed, total, wf) {
       cnArea.value = promptText;
     } else {
       cnArea.value = promptText;
-      const enParts = ec.map(c => {
-        const item = c.items[Math.floor(Math.random() * c.items.length)];
-        return item ? item.en.split('/')[0].trim() : '';
-      }).filter(Boolean);
-      enArea.value = getIdentityEn() + ', ' + enParts.join(', ');
+      // Reuse the same picks that generated promptText for consistent CN->EN mapping
+      if (picks.length) {
+        const enParts = picks.map(p => p.en.split('/')[0].trim());
+        enArea.value = getIdentityEn() + ', ' + enParts.join(', ');
+      } else {
+        enArea.value = promptText;
+      }
     }
     resizePromptAreas();
     _updateProgress(`✨ 优化中... (${idx + 1}/${comfySettings.randomCount}组)`, completed, total, (Date.now() - startTime) / 1000);
