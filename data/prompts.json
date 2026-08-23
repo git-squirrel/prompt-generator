@@ -2,6 +2,7 @@
   "pg_prompts_data": [
     {
       "name": "场景 (Scenes)",
+      "file": "",
       "items": [
         {
           "cn": "山水",
@@ -63,10 +64,12 @@
           "cn": "海岸线",
           "en": "coastline"
         }
-      ]
+      ],
+      "count": 15
     },
     {
       "name": "风格 (Style)",
+      "file": "",
       "items": [
         {
           "cn": "写实",
@@ -128,10 +131,12 @@
           "cn": "巴洛克",
           "en": "baroque"
         }
-      ]
+      ],
+      "count": 15
     },
     {
       "name": "光线 (Lighting)",
+      "file": "",
       "items": [
         {
           "cn": "自然光",
@@ -193,10 +198,12 @@
           "cn": "丁达尔效应",
           "en": "Tyndall effect"
         }
-      ]
+      ],
+      "count": 15
     },
     {
       "name": "画面 (Visual)",
+      "file": "",
       "items": [
         {
           "cn": "浅景深",
@@ -258,10 +265,12 @@
           "cn": "移轴",
           "en": "tilt-shift"
         }
-      ]
+      ],
+      "count": 15
     },
     {
       "name": "色彩 (Color)",
+      "file": "",
       "items": [
         {
           "cn": "暖色调",
@@ -315,14 +324,15 @@
           "cn": "赛博朋克色",
           "en": "cyberpunk color palette"
         }
-      ]
+      ],
+      "count": 13
     }
   ],
   "pg_prompts_data_enabled": {
     "场景 (Scenes)": false,
     "风格 (Style)": true,
     "光线 (Lighting)": true,
-    "画面 (Visual)": false,
+    "画面 (Visual)": true,
     "色彩 (Color)": false
   },
   "pg_enrichCN": [],

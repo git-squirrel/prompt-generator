@@ -55,7 +55,25 @@ def find_html_file(script_dir, preferred=''):
     print(f'  [info] 找到 {len(html_files)} 个 HTML 文件，使用最新的: {html_files[0]}')
     return html_files[0]
 
-DATA_DIR = None  # Will be set in main()
+# Max request sizes by file type
+MAX_BODY_SIZES = {
+    'prompts.json': 2 * 1024 * 1024,      # 2MB
+    'ai_settings.json': 512 * 1024,        # 512KB
+    'comfy_settings.json': 5 * 1024 * 1024, # 5MB (includes workflows)
+    'server_config.json': 16 * 1024,        # 16KB
+}
+
+def validate_save_data(filename, data):
+    """Basic validation of incoming data before writing to disk."""
+    if not isinstance(data, (dict, list)):
+        raise ValueError('数据必须是 JSON 对象或数组')
+    if filename == 'server_config.json':
+        if isinstance(data, dict):
+            if 'port' in data and not isinstance(data['port'], int):
+                raise ValueError('端口必须是整数')
+            if 'host' in data and not isinstance(data['host'], str):
+                raise ValueError('主机地址必须是字符串')
+    return True
 
 class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
     comfy_url = "http://127.0.0.1:8188"
@@ -198,7 +216,16 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
     def _handle_save_config(self):
         try:
             content_len = int(self.headers.get('Content-Length', 0))
+            if content_len > MAX_BODY_SIZES['server_config.json']:
+                self.send_response(413)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "请求体过大"}).encode())
+                return
             body = self.rfile.read(content_len) if content_len > 0 else b'{}'
+            data = json.loads(body.decode('utf-8'))
+            validate_save_data('server_config.json', data)
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                 f.write(body.decode('utf-8'))
             self.send_response(200)
@@ -206,6 +233,12 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(b'{"ok":true}')
+        except (json.JSONDecodeError, ValueError) as e:
+            self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
         except Exception as e:
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')
@@ -224,7 +257,7 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
             # Trigger shutdown in a separate thread so we can respond first
             def _do_shutdown():
                 import subprocess
-                subprocess.run(['shutdown', '/s', '/t', str(seconds)], shell=True)
+                subprocess.run(['shutdown', '/s', '/t', str(seconds)], shell=False)
             threading.Thread(target=_do_shutdown, daemon=True).start()
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -303,8 +336,17 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
     def _handle_save_file(self, filename):
         try:
             content_len = int(self.headers.get('Content-Length', 0))
+            max_size = MAX_BODY_SIZES.get(filename, 1024 * 1024)
+            if content_len > max_size:
+                self.send_response(413)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": f"请求体过大，最大 {max_size // 1024}KB"}).encode())
+                return
             body = self.rfile.read(content_len) if content_len > 0 else b'{}'
             data = json.loads(body)
+            validate_save_data(filename, data)
             data_file = os.path.join(self.data_dir, filename) if self.data_dir else None
             if data_file:
                 os.makedirs(os.path.dirname(data_file), exist_ok=True)
@@ -315,6 +357,18 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(b'{"ok":true}')
+        except json.JSONDecodeError as e:
+            self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": f"JSON 解析错误: {str(e)}"}).encode())
+        except ValueError as e:
+            self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
         except Exception as e:
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')
