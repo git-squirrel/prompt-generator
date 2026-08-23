@@ -423,7 +423,7 @@ function syncEn(cnText, usedItems) {
     const idEn = getIdentityEn();
     en = idEn + ', ' + usedItems.map(p => p.en.split('/')[0].trim()).join(', ');
   } else {
-    const segs = cnText.split(/[，,] /).map(s => s.trim()).filter(Boolean);
+    const segs = cnText.split(/[，,]\s*/).map(s => s.trim()).filter(Boolean);
     en = segs.map(s => {
       const e = CN_EN_MAP[s];
       if (e) return e.split('/')[0].trim();

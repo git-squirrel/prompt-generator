@@ -1,0 +1,14 @@
+{
+  "pg_comfy_settings": {
+    "url": "http://127.0.0.1:8188",
+    "language": "en",
+    "randomCount": 1,
+    "batchCount": 1,
+    "selectedWorkflow": -1,
+    "width": 512,
+    "height": 512,
+    "useProxy": true,
+    "autoShutdown": false,
+    "shutdownMinutes": 5
+  }
+}

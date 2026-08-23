@@ -1,0 +1,7 @@
+{
+  "host": "127.0.0.1",
+  "port": 18080,
+  "html_file": "prompt-generator.html",
+  "comfy_url": "http://127.0.0.1:8188",
+  "enable_proxy": true
+}

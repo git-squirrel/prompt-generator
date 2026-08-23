@@ -7,33 +7,56 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+<!-- SVG symbol library: referenced via <use href="#icon-xxx"> -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <symbol id="icon-sparkles" viewBox="0 0 24 24"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></symbol>
+  <symbol id="icon-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20"/></symbol>
+  <symbol id="icon-dice" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none"/><circle cx="16" cy="8" r="1.3" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.3" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="icon-robot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><circle cx="9" cy="14" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="14" r="1.2" fill="currentColor" stroke="none"/><path d="M12 8V4M9 4h6"/></symbol>
+  <symbol id="icon-copy" viewBox="0 0 24 24"><rect x="8" y="3" width="10" height="14" rx="2"/><path d="M5 8v11a2 2 0 002 2h8"/></symbol>
+  <symbol id="icon-text" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></symbol>
+  <symbol id="icon-bulb" viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M12 2a6 6 0 00-3.4 10.9c.6.4.9 1.1.9 1.8V16h5v-1.3c0-.7.3-1.4.9-1.8A6 6 0 0012 2z"/></symbol>
+  <symbol id="icon-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></symbol>
+  <symbol id="icon-doc" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></symbol>
+  <symbol id="icon-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.7 2.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/></symbol>
+  <symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><path d="M21 15l-5-5L5 21"/></symbol>
+  <symbol id="icon-plug" viewBox="0 0 24 24"><path d="M9 2v4M15 2v4M7 8h10l-1 5a4 4 0 01-8 0z"/><path d="M12 17v5"/></symbol>
+  <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M12 11v5M9.5 13.5L12 11l2.5 2.5"/></symbol>
+  <symbol id="icon-play" viewBox="0 0 24 24"><path d="M5 3l16 9-16 9V3z"/></symbol>
+  <symbol id="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></symbol>
+  <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></symbol>
+  <symbol id="icon-save" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></symbol>
+  <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></symbol>
+  <symbol id="icon-user" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2"/><path d="M15 10h3M15 14h3M6 16.5c.5-1.5 1.8-2.5 3-2.5s2.5 1 3 2.5"/></symbol>
+</svg>
 <div class="container">
-  <h1><svg class="icon brand-icon" viewBox="0 0 24 24"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg><span class="brand-text">提示词生成器</span></h1>
+  <h1><svg class="icon brand-icon"><use href="#icon-sparkles"/></svg><span class="brand-text">提示词生成器</span></h1>
   <p class="subtitle">从已开启的类别中随机组合提示词，支持中英文对照与深度优化</p>
 
   <div class="top-section">
     <!-- CN Prompt -->
     <div class="prompt-row">
-      <span class="plabel"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20"/></svg> 中文</span>
+      <span class="plabel"><svg class="icon"><use href="#icon-globe"/></svg> 中文</span>
       <textarea id="promptArea" placeholder="点击「随机」生成提示词，或手动输入..." oninput="autoResizeTextarea(this)" data-min-height="180"></textarea>
       <div class="btn-group">
-        <button class="btn btn-random" onclick="randomPrompt()"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none"/><circle cx="16" cy="8" r="1.3" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.3" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg> 随机</button>
-        <button class="btn btn-optimize" onclick="optimizePrompt()"><svg class="icon" viewBox="0 0 24 24"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/></svg> 优化</button>
-        <button class="btn btn-ai" onclick="aiPolish()" id="aiPolishBtn" title="使用 AI 润色提示词"><svg class="icon" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><circle cx="9" cy="14" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="14" r="1.2" fill="currentColor" stroke="none"/><path d="M12 8V4M9 4h6"/></svg> AI</button>
-        <button class="btn btn-copy" onclick="copyPrompt('promptArea')"><svg class="icon" viewBox="0 0 24 24"><rect x="8" y="3" width="10" height="14" rx="2"/><path d="M5 8v11a2 2 0 002 2h8"/></svg> 复制</button>
+        <button class="btn btn-random" onclick="randomPrompt()"><svg class="icon"><use href="#icon-dice"/></svg> 随机</button>
+        <button class="btn btn-optimize" onclick="optimizePrompt()"><svg class="icon"><use href="#icon-sparkles"/></svg> 优化</button>
+        <button class="btn btn-ai" onclick="aiPolish()" id="aiPolishBtn" title="使用 AI 润色提示词"><svg class="icon"><use href="#icon-robot"/></svg> AI</button>
+        <button class="btn btn-copy" onclick="copyPrompt('promptArea')"><svg class="icon"><use href="#icon-copy"/></svg> 复制</button>
         <button class="btn btn-clear" onclick="clearPrompt()">清空</button>
       </div>
     </div>
     <!-- EN Prompt -->
     <div class="prompt-row en-row">
-      <span class="plabel"><svg class="icon" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg> English</span>
+      <span class="plabel"><svg class="icon"><use href="#icon-text"/></svg> English</span>
       <textarea id="promptEnArea" readonly placeholder="英文提示词将自动同步显示..." oninput="autoResizeTextarea(this)" data-min-height="50"></textarea>
       <div class="btn-group">
-        <button class="btn btn-copy" onclick="copyPrompt('promptEnArea')" style="font-size:11px;padding:5px 8px;"><svg class="icon" viewBox="0 0 24 24"><rect x="8" y="3" width="10" height="14" rx="2"/><path d="M5 8v11a2 2 0 002 2h8"/></svg> 复制</button>
+        <button class="btn btn-copy" onclick="copyPrompt('promptEnArea')" style="font-size:11px;padding:5px 8px;"><svg class="icon"><use href="#icon-copy"/></svg> 复制</button>
       </div>
     </div>
     <div class="bottom-bar">
-      <span class="hint"><svg class="icon" viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M12 2a6 6 0 00-3.4 10.9c.6.4.9 1.1.9 1.8V16h5v-1.3c0-.7.3-1.4.9-1.8A6 6 0 0012 2z"/></svg> 点击下方词条 · 中英文自动同步</span>
+      <span class="hint"><svg class="icon"><use href="#icon-bulb"/></svg> 点击下方词条 · 中英文自动同步</span>
       <span id="toast" class="toast"></span>
     </div>
   </div>
@@ -41,29 +64,29 @@
   <!-- AI Control Bar -->
   <div class="ai-bar">
     <div class="ai-toggle-group">
-      <svg class="icon ai-icon" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><circle cx="9" cy="14" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="14" r="1.2" fill="currentColor" stroke="none"/><path d="M12 8V4M9 4h6"/></svg>
+      <svg class="icon ai-icon"><use href="#icon-robot"/></svg>
       <span class="ai-label">AI 润色</span>
       <label class="toggle"><input type="checkbox" id="aiToggle" onchange="updateAiStatus()"><span class="slider"></span></label>
       <span id="aiStatus" class="ai-indicator">未配置</span>
     </div>
-    <button class="btn-ai-sm" onclick="openAiSettings()"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg> 设置</button>
-    <button class="btn-ai-sm" onclick="openAiPreset()"><svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg> 预设</button>
-    <button class="btn-ai-sm" onclick="openAiHistory()"><svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.7 2.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/></svg> 历史</button>
+    <button class="btn-ai-sm" onclick="openAiSettings()"><svg class="icon"><use href="#icon-settings"/></svg> 设置</button>
+    <button class="btn-ai-sm" onclick="openAiPreset()"><svg class="icon"><use href="#icon-doc"/></svg> 预设</button>
+    <button class="btn-ai-sm" onclick="openAiHistory()"><svg class="icon"><use href="#icon-history"/></svg> 历史</button>
   </div>
 
   <!-- ComfyUI Bar -->
   <div class="comfy-bar">
-    <span class="comfy-label"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><path d="M21 15l-5-5L5 21"/></svg> ComfyUI</span>
+    <span class="comfy-label"><svg class="icon"><use href="#icon-image"/></svg> ComfyUI</span>
     <span id="comfyStatus" class="ai-indicator">---</span>
-    <button class="btn-comfy-sm" onclick="checkComfyConnection();showToast('⏳ 检测中...','success')"><svg class="icon" viewBox="0 0 24 24"><path d="M9 2v4M15 2v4M7 8h10l-1 5a4 4 0 01-8 0z"/><path d="M12 17v5"/></svg> 检测连接</button>
-    <button class="btn-comfy-sm" onclick="openComfySettings()"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg> 设置</button>
+    <button class="btn-comfy-sm" onclick="checkComfyConnection();showToast('⏳ 检测中...','success')"><svg class="icon"><use href="#icon-plug"/></svg> 检测连接</button>
+    <button class="btn-comfy-sm" onclick="openComfySettings()"><svg class="icon"><use href="#icon-settings"/></svg> 设置</button>
     <input type="file" id="comfyFileInput" accept=".json" style="display:none" onchange="handleWorkflowUpload(event)">
-    <button class="btn-comfy-sm" onclick="document.getElementById('comfyFileInput').click()"><svg class="icon" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M12 11v5M9.5 13.5L12 11l2.5 2.5"/></svg> 上传工作流</button>
-    <button class="btn-comfy-go" id="comfyStartBtn" onclick="startComfyGeneration()"><svg class="icon" viewBox="0 0 24 24"><path d="M5 3l16 9-16 9V3z"/></svg> 开始生图</button>
-    <button class="btn-comfy-sm" id="comfyStopBtn" onclick="stopComfyGeneration()" style="display:none;border-color:var(--red);color:var(--red)"><svg class="icon" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg> 中止</button>
+    <button class="btn-comfy-sm" onclick="document.getElementById('comfyFileInput').click()"><svg class="icon"><use href="#icon-upload"/></svg> 上传工作流</button>
+    <button class="btn-comfy-go" id="comfyStartBtn" onclick="startComfyGeneration()"><svg class="icon"><use href="#icon-play"/></svg> 开始生图</button>
+    <button class="btn-comfy-sm" id="comfyStopBtn" onclick="stopComfyGeneration()" style="display:none;border-color:var(--red);color:var(--red)"><svg class="icon"><use href="#icon-stop"/></svg> 中止</button>
     <span id="comfyProgress" class="comfy-progress"></span>
     <!-- 定时关机 -->
-    <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px;color:var(--text2);margin-left:6px;"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+    <svg class="icon" style="width:14px;height:14px;color:var(--text2);margin-left:6px;"><use href="#icon-clock"/></svg>
     <label class="toggle" title="生图完成后自动关机">
       <input type="checkbox" id="shutdownToggle" onchange="saveShutdownSettings()"><span class="slider"></span>
     </label>
@@ -113,7 +136,7 @@
   <div class="footer-info" id="footerInfo">
     <span>共 <span id="totalItems">0</span> 条提示词 · 开启的类别参与随机选择</span>
     <span style="flex:1;"></span>
-    <button class="btn btn-mgmt" onclick="toggleMgmtPanel()" style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);font-size:11px;padding:5px 11px;border-radius:7px;cursor:pointer;font-family:inherit;"><svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg> 管理类别与提示词</button>
+    <button class="btn btn-mgmt" onclick="toggleMgmtPanel()" style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);font-size:11px;padding:5px 11px;border-radius:7px;cursor:pointer;font-family:inherit;"><svg class="icon" style="width:12px;height:12px;"><use href="#icon-settings"/></svg> 管理类别与提示词</button>
   </div>
   <div class="mgmt-panel" id="mgmtPanel" style="display:none;margin-top:8px;">
     <div class="mgmt-row">
@@ -125,7 +148,7 @@
       <button class="btn btn-sm btn-add" onclick="batchAddCategories()" style="margin-top:0">批量添加</button>
     </div>
     <div style="border-top:1px solid var(--border);margin:12px 0 10px;"></div>
-    <div style="font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px;"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px;color:var(--accent-2);"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2"/><path d="M15 10h3M15 14h3M6 16.5c.5-1.5 1.8-2.5 3-2.5s2.5 1 3 2.5"/></svg> 身份管理</div>
+    <div style="font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px;"><svg class="icon" style="width:14px;height:14px;color:var(--accent-2);"><use href="#icon-user"/></svg> 身份管理</div>
     <div class="mgmt-row">
     <span style="font-size:12px;color:var(--text2);min-width:50px;">年龄范围</span>
     <input type="number" id="ageMinInput" class="mgmt-input" style="width:70px;" min="1" max="99" placeholder="最小">
@@ -147,7 +170,7 @@
     <div id="genderList" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
     <!-- 润色模板管理 -->
     <div style="border-top:1px solid var(--border);margin:12px 0 10px;"></div>
-    <div style="font-size:13px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px;"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px;color:var(--accent-2);"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg> 润色模板</div>
+    <div style="font-size:13px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px;"><svg class="icon" style="width:14px;height:14px;color:var(--accent-2);"><use href="#icon-doc"/></svg> 润色模板</div>
     <div style="font-size:10px;color:var(--text2);margin-bottom:8px;">用于 optimizePrompt 润色功能，分为 6 组模板</div>
     <div id="enrichMgmtContainer"></div>
     </div><!-- end mgmtPanel -->
@@ -155,16 +178,16 @@
   <!-- Image Gallery -->
   <div class="gallery-section" id="gallerySection">
     <div class="gallery-header">
-      <span class="gallery-title"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><path d="M21 15l-5-5L5 21"/></svg> 生图画廊</span>
+      <span class="gallery-title"><svg class="icon"><use href="#icon-image"/></svg> 生图画廊</span>
       <span class="gallery-count" id="galleryCount">0 张</span>
-      <button class="gallery-clear-btn" onclick="clearComfyGallery()"><svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg> 清空</button>
+      <button class="gallery-clear-btn" onclick="clearComfyGallery()"><svg class="icon" style="width:12px;height:12px;"><use href="#icon-trash"/></svg> 清空</button>
     </div>
     <div class="gallery-grid" id="galleryGrid"></div>
     <div class="gallery-empty" id="galleryEmpty">暂无图片，开始生图后自动显示</div>
   </div>
   <!-- Bottom Data Backup -->
   <div style="text-align:center;margin-top:14px;padding:10px 0;border-top:1px solid var(--border)">
-    <span style="font-size:11px;color:var(--text2);margin-right:10px;display:inline-flex;align-items:center;gap:5px;"><svg class="icon" viewBox="0 0 24 24" style="width:13px;height:13px;"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg> 数据备份</span>
+    <span style="font-size:11px;color:var(--text2);margin-right:10px;display:inline-flex;align-items:center;gap:5px;"><svg class="icon" style="width:13px;height:13px;"><use href="#icon-save"/></svg> 数据备份</span>
     <button class="btn btn-sm" style="background:var(--accent);color:#fff;border:none;font-size:11px;padding:6px 13px;font-family:inherit;cursor:pointer;border-radius:8px" onclick="exportAllData()">提示词生成器导出</button>
     <button class="btn btn-sm" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);font-size:11px;padding:6px 13px;font-family:inherit;cursor:pointer;border-radius:7px;margin-left:6px" onclick="document.getElementById('importDataInputBottom').click()">提示词生成器导入</button>
     <input type="file" id="importDataInputBottom" accept=".json" style="display:none" onchange="importAllData(event)">
@@ -180,8 +203,8 @@
       <div class="imi-prompt"><span class="imi-label">提示词:</span> <span id="imiPromptText"></span></div>
       <div><span class="imi-label">Seed:</span> <span class="imi-seed" id="imiSeedText"></span></div>
       <div class="imi-actions">
-        <button onclick="downloadCurrentModalImg()"><svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg> 下载</button>
-        <button class="imi-del" onclick="deleteCurrentModalImg()"><svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg> 删除</button>
+        <button onclick="downloadCurrentModalImg()"><svg class="icon" style="width:12px;height:12px;"><use href="#icon-download"/></svg> 下载</button>
+        <button class="imi-del" onclick="deleteCurrentModalImg()"><svg class="icon" style="width:12px;height:12px;"><use href="#icon-trash"/></svg> 删除</button>
       </div>
     </div>
   </div>

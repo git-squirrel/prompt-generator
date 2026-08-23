@@ -15,7 +15,8 @@ import time
 import urllib.request
 import urllib.error
 
-CONFIG_FILE = os.path.join(os.getcwd(), 'data', 'server_config.json')
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(SCRIPT_DIR, 'data', 'server_config.json')
 
 DEFAULT_CONFIG = {
     "host": "127.0.0.1",
@@ -305,16 +306,12 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
                                     cmap[item['cn']] = item['en']
                         if cmap:
                             content['cn_en_map'] = cmap
-                    self._merge_aux_data(content)
                 self.wfile.write(json.dumps(content, ensure_ascii=False).encode('utf-8'))
                 return
             except:
                 pass
         self.wfile.write(b'{}')
 
-    def _merge_aux_data(self, result):
-        """enrich_data is now embedded in prompts.json."""
-        pass
 
     def _handle_load_json_file(self, filename):
         """Serve a static JSON file from data_dir directly, or return {} if missing."""
@@ -422,8 +419,8 @@ def main():
     host = config['host']
     port = config['port']
     
-    # Use current working directory for all data paths
-    script_dir = os.getcwd()
+    # Use script directory for all data paths so it works from any cwd
+    script_dir = SCRIPT_DIR
     os.chdir(script_dir)
     
     # Find HTML file
@@ -445,7 +442,7 @@ def main():
     ComfyProxyHandler.comfy_url = config['comfy_url']
     ComfyProxyHandler.enable_proxy = config.get('enable_proxy', True)
     ComfyProxyHandler.html_file = html_file
-    ComfyProxyHandler.data_dir = os.path.join(os.getcwd(), 'data')
+    ComfyProxyHandler.data_dir = os.path.join(SCRIPT_DIR, 'data')
     
     try:
         server = socketserver.TCPServer((host, port), ComfyProxyHandler)

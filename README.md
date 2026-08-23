@@ -45,14 +45,17 @@ Windows 用户也可直接双击 `start_server.bat`。
 4. 点击 🚀 **开始生图**
 
 ## 🖼️ ComfyUI 生图说明
-**工作流必须使用 API 格式导出：**
 
-正确操作：
+**推荐使用 API 格式导出工作流：**
+
 1. 在 ComfyUI 搭建好工作流
-2. 点击 ComfyUI 界面右上角 **Save (API Format)** 按钮导出 JSON
+2. 点击右上角 **Save (API Format)** 导出 JSON
 3. 在本页面上传该 JSON 文件
-❌ 不要使用普通的 Save / Export（那种格式包含界面布局信息，无法解析）
-系统会自动检测 CLIPTextEncode 节点（替换提示词）、EmptyLatentImage 节点（读取尺寸）、KSampler 节点（随机种子）。
+
+> 普通 Save / Export 导出的界面布局格式（`{nodes:[...], links:[...]}`）也能被识别并自动转换，
+> 但 API 格式（`{node_id: {class_type, inputs}}`）解析更稳定，建议优先使用。
+
+系统会自动检测 CLIPTextEncode 节点（替换提示词）、EmptyLatentImage 节点（读取尺寸）、KSampler / KSamplerAdvanced 节点（随机种子）。
 
 ## 🎯 功能介绍
 
@@ -97,11 +100,11 @@ Windows 用户也可直接双击 `start_server.bat`。
 
 AI 设置中新增「润色语言」选项：
 
-| 模式 | 说明 | Token 消耗 |
-|------|------|-----------|
-| 🇨🇳+🇬🇧 中+英 | 同时润色中英文（默认） | ~100% |
-| 🇨🇳 仅中文 | 仅润色中文提示词 | ~60% |
-| 🇬🇧 仅英文 | 仅润色英文提示词 | ~50% |
+|| 模式 | 说明 |
+||------|------|
+|| 🇨🇳+🇬🇧 中+英 | 同时润色中英文（默认） |
+|| 🇨🇳 仅中文 | 仅润色中文提示词，Token 更省 |
+|| 🇬🇧 仅英文 | 仅润色英文提示词，Token 最省 |
 
 选择单语言模式可大幅减少 Token 消耗，本地模型也更快返回结果。
 

@@ -329,7 +329,7 @@
     }
   ],
   "pg_prompts_data_enabled": {
-    "场景 (Scenes)": false,
+    "场景 (Scenes)": true,
     "风格 (Style)": true,
     "光线 (Lighting)": true,
     "画面 (Visual)": true,

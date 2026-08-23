@@ -15,6 +15,8 @@ echo.
 
 python start_server.py
 
+REM Exit code 2 = Ctrl+C (KeyboardInterrupt), not a real failure
+if %ERRORLEVEL% EQU 2 exit /b 0
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo [ERROR] Failed to start. Make sure Python is installed.
