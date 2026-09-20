@@ -2595,7 +2595,32 @@ function importAllData(event) {
 // SECTION 18: Initialization
 // ============================================================
 
+
+// ============================================================
+// Theme toggle (DeepSeek light/dark)
+// ============================================================
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { storage.setRaw('theme', next); } catch (e) {}
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.innerHTML = next === 'dark'
+    ? '<svg class="icon"><use href="#icon-sun"/></svg>'
+    : '<svg class="icon"><use href="#icon-moon"/></svg>';
+}
+
 async function init() {
+  // Theme boot (DeepSeek light default, persisted)
+  try {
+    const t = (typeof storage !== 'undefined' && storage.getRaw('theme')) || 'light';
+    document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+    const _tb = document.getElementById('themeToggleBtn');
+    if (_tb) _tb.innerHTML = (t === 'dark')
+      ? '<svg class="icon"><use href="#icon-sun"/></svg>'
+      : '<svg class="icon"><use href="#icon-moon"/></svg>';
+  } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+
   if (window.location.origin && window.location.origin.startsWith('http')) {
     const loaded = await loadAllFromServer();
     if (loaded) { console.log('✅ Data restored from server backup'); }

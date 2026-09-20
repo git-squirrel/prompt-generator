@@ -1,13 +1,17 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>提示词生成器 - Prompt Generator</title>
+<title>提示词生成器 · Prompt Generator</title>
 <link rel="stylesheet" href="css/style.css">
+<script>
+// Pre-paint theme to avoid flash
+(function(){try{var t=localStorage.getItem('pg_v2_theme');if(t){t=JSON.parse(t);}document.documentElement.setAttribute('data-theme', t==='dark'?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}})();
+</script>
 </head>
 <body>
-<!-- SVG symbol library: referenced via <use href="#icon-xxx"> -->
+<!-- SVG symbol library -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
   <symbol id="icon-sparkles" viewBox="0 0 24 24"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></symbol>
   <symbol id="icon-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20"/></symbol>
@@ -29,10 +33,24 @@
   <symbol id="icon-save" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></symbol>
   <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></symbol>
   <symbol id="icon-user" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2"/><path d="M15 10h3M15 14h3M6 16.5c.5-1.5 1.8-2.5 3-2.5s2.5 1 3 2.5"/></symbol>
+  <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></symbol>
 </svg>
+
 <div class="container">
-  <h1><svg class="icon brand-icon"><use href="#icon-sparkles"/></svg><span class="brand-text">提示词生成器</span></h1>
-  <p class="subtitle">从已开启的类别中随机组合提示词，支持中英文对照与深度优化</p>
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="brand">
+      <svg class="icon brand-icon"><use href="#icon-sparkles"/></svg>
+      <div>
+        <div class="brand-text">提示词生成器</div>
+        <div class="brand-sub">随机组合 · AI 润色 · ComfyUI 生图</div>
+      </div>
+    </div>
+    <button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="切换主题">
+      <svg class="icon"><use href="#icon-moon"/></svg>
+    </button>
+  </div>
 
   <div class="top-section">
     <!-- CN Prompt -->
@@ -52,7 +70,7 @@
       <span class="plabel"><svg class="icon"><use href="#icon-text"/></svg> English</span>
       <textarea id="promptEnArea" readonly placeholder="英文提示词将自动同步显示..." oninput="autoResizeTextarea(this)" data-min-height="50"></textarea>
       <div class="btn-group">
-        <button class="btn btn-copy" onclick="copyPrompt('promptEnArea')" style="font-size:11px;padding:5px 8px;"><svg class="icon"><use href="#icon-copy"/></svg> 复制</button>
+        <button class="btn btn-copy" onclick="copyPrompt('promptEnArea')" style="font-size:11px;padding:5px 10px;"><svg class="icon"><use href="#icon-copy"/></svg> 复制</button>
       </div>
     </div>
     <div class="bottom-bar">
@@ -91,7 +109,7 @@
       <input type="checkbox" id="shutdownToggle" onchange="saveShutdownSettings()"><span class="slider"></span>
     </label>
     <input type="number" id="shutdownMinutes" value="5" min="0" max="120"
-      style="width:38px;padding:2px 4px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:11px;text-align:center;outline:none;"
+      style="width:40px;padding:3px 6px;background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;color:var(--text);font-size:11px;text-align:center;outline:none;"
       onchange="saveShutdownSettings()">
     <span style="font-size:10px;color:var(--text2);white-space:nowrap;">分后关机</span>
   </div>
@@ -136,7 +154,7 @@
   <div class="footer-info" id="footerInfo">
     <span>共 <span id="totalItems">0</span> 条提示词 · 开启的类别参与随机选择</span>
     <span style="flex:1;"></span>
-    <button class="btn btn-mgmt" onclick="toggleMgmtPanel()" style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);font-size:11px;padding:5px 11px;border-radius:7px;cursor:pointer;font-family:inherit;"><svg class="icon" style="width:12px;height:12px;"><use href="#icon-settings"/></svg> 管理类别与提示词</button>
+    <button class="btn btn-mgmt" onclick="toggleMgmtPanel()" style="display:inline-flex;align-items:center;gap:5px;background:var(--surface);color:var(--text2);border:1px solid var(--border-strong);font-size:11px;padding:5px 12px;border-radius:999px;cursor:pointer;font-family:inherit;"><svg class="icon" style="width:12px;height:12px;"><use href="#icon-settings"/></svg> 管理类别与提示词</button>
   </div>
   <div class="mgmt-panel" id="mgmtPanel" style="display:none;margin-top:8px;">
     <div class="mgmt-row">
@@ -173,7 +191,7 @@
     <div style="font-size:13px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px;"><svg class="icon" style="width:14px;height:14px;color:var(--accent-2);"><use href="#icon-doc"/></svg> 润色模板</div>
     <div style="font-size:10px;color:var(--text2);margin-bottom:8px;">用于 optimizePrompt 润色功能，分为 6 组模板</div>
     <div id="enrichMgmtContainer"></div>
-    </div><!-- end mgmtPanel -->
+  </div><!-- end mgmtPanel -->
 
   <!-- Image Gallery -->
   <div class="gallery-section" id="gallerySection">
@@ -185,11 +203,12 @@
     <div class="gallery-grid" id="galleryGrid"></div>
     <div class="gallery-empty" id="galleryEmpty">暂无图片，开始生图后自动显示</div>
   </div>
+
   <!-- Bottom Data Backup -->
-  <div style="text-align:center;margin-top:14px;padding:10px 0;border-top:1px solid var(--border)">
+  <div style="text-align:center;margin-top:16px;padding:12px 0;border-top:1px solid var(--border)">
     <span style="font-size:11px;color:var(--text2);margin-right:10px;display:inline-flex;align-items:center;gap:5px;"><svg class="icon" style="width:13px;height:13px;"><use href="#icon-save"/></svg> 数据备份</span>
-    <button class="btn btn-sm" style="background:var(--accent);color:#fff;border:none;font-size:11px;padding:6px 13px;font-family:inherit;cursor:pointer;border-radius:8px" onclick="exportAllData()">提示词生成器导出</button>
-    <button class="btn btn-sm" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);font-size:11px;padding:6px 13px;font-family:inherit;cursor:pointer;border-radius:7px;margin-left:6px" onclick="document.getElementById('importDataInputBottom').click()">提示词生成器导入</button>
+    <button class="btn btn-sm" style="background:var(--accent);color:#fff;border:none;font-size:11px;padding:6px 14px;font-family:inherit;cursor:pointer;border-radius:999px" onclick="exportAllData()">提示词生成器导出</button>
+    <button class="btn btn-sm" style="background:var(--surface);color:var(--text);border:1px solid var(--border-strong);font-size:11px;padding:6px 14px;font-family:inherit;cursor:pointer;border-radius:999px;margin-left:6px" onclick="document.getElementById('importDataInputBottom').click()">提示词生成器导入</button>
     <input type="file" id="importDataInputBottom" accept=".json" style="display:none" onchange="importAllData(event)">
   </div>
 </div>
