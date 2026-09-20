@@ -93,7 +93,13 @@ function defaultIdentityRegions() { return ['中国', '韩国', '日本', '欧�
 function defaultIdentityGenders() { return ['女', '男']; }
 function defaultIdentityAge() { return { min: 18, max: 49 }; }
 
-function _resolveIdentityValues() {
+// 身份快照：同一次提示词构建里，中文和英文必须使用同一套身份。
+// 原来 getIdentityPrefix() / getIdentityEn() 各自调用本函数，开启「随机」时会抽两次，
+// 导致中文显示 28 岁而英文显示 37 岁。只有 forceFresh=true 才重新抽样。
+let _identitySnapshot = null;
+
+function _resolveIdentityValues(forceFresh) {
+  if (!forceFresh && _identitySnapshot) return _identitySnapshot;
   let age, region, gender;
   if (identityAgeRandom) {
     const min = identityAge.min || 18;
@@ -113,8 +119,12 @@ function _resolveIdentityValues() {
   } else {
     gender = document.getElementById('genderSelect')?.value || '';
   }
-  return { age, region, gender };
+  _identitySnapshot = { age, region, gender };
+  return _identitySnapshot;
 }
+
+// 强制重新抽一次身份并锁定，供一次提示词构建（中英文共用）使用
+function rollIdentity() { return _resolveIdentityValues(true); }
 
 function getIdentityPrefix() {
   const { age, region, gender } = _resolveIdentityValues();
@@ -145,6 +155,7 @@ function updateIdentityPreview() {
   if (ageRandomToggle) identityAgeRandom = ageRandomToggle.checked;
   if (regionRandomToggle) identityRegionRandom = regionRandomToggle.checked;
   if (genderRandomToggle) identityGenderRandom = genderRandomToggle.checked;
+  rollIdentity();   // 预览每次重新抽，保证中英文一致
   preview.textContent = getIdentityPrefix();
 }
 
@@ -425,6 +436,8 @@ function randomPrompt() {
   if (ageRT) identityAgeRandom = ageRT.checked;
   if (regionRT) identityRegionRandom = regionRT.checked;
   if (genderRT) identityGenderRandom = genderRT.checked;
+
+  rollIdentity();   // 本次构建抽一次身份，保证中英文一致
 
   // Treat undefined as enabled, consistent with renderCategories()
   const enabledCats = DATA.filter(c => promptsEnabled[c.name] !== false);
@@ -1841,6 +1854,60 @@ function saveComfyGallery() {
   syncAllToServer();
 }
 
+// —— 画廊瀑布流布局 ——
+// 不用 CSS column-count：等高图片时 Chromium 的多列平衡会算错，只填前几列、末尾留空列。
+// 改为 JS 分列：按「已累计高度」把每张放进当前最矮的列，保证每列都被填满。
+const GALLERY_COLS = 4;
+const GALLERY_GAP = 12;
+const _galleryAspect = {};        // url -> 高/宽，图片加载后缓存
+let _galleryRelayoutTimer = null;
+let _galleryRelayoutPending = false;
+
+function _galleryAspectOf(item) {
+  const a = _galleryAspect[item && item.url];
+  return (typeof a === 'number' && a > 0) ? a : 1;   // 未知时按正方形估算
+}
+
+// 图片加载完成后记录真实宽高比，必要时重排一次（收敛，不会死循环）
+function galleryImgLoaded(img) {
+  if (!img || !img.naturalWidth) return;
+  const url = img.getAttribute('src');
+  if (!url) return;
+  const a = img.naturalHeight / img.naturalWidth;
+  const prev = _galleryAspect[url];
+  if (typeof prev === 'number' && Math.abs(prev - a) < 0.01) return;
+  _galleryAspect[url] = a;
+  _galleryRelayoutPending = true;
+  clearTimeout(_galleryRelayoutTimer);
+  _galleryRelayoutTimer = setTimeout(() => {
+    _galleryRelayoutTimer = null;
+    if (!_galleryRelayoutPending) return;
+    _galleryRelayoutPending = false;
+    renderComfyGallery();
+  }, 150);
+}
+
+function _galleryColsForWidth() {
+  const w = window.innerWidth || 1200;
+  return w <= 620 ? 2 : (w <= 900 ? 3 : GALLERY_COLS);
+}
+
+function _galleryItemHTML(item, idx) {
+  const hasBadge = item.badge !== undefined && item.badge !== null && String(item.badge) !== '';
+  return `<div class="gallery-item" onclick="openGalleryModal(${idx})">
+    <img src="${item.url}" alt="gallery" loading="lazy" onload="galleryImgLoaded(this)">
+    <div class="gallery-bar" onclick="event.stopPropagation()">
+      ${hasBadge ? `<span class="gallery-idx">#${escapeHtml(String(item.badge))}</span>` : ''}
+      <button class="gallery-btn" onclick="downloadGalleryImg(${idx})" title="下载原图">
+        <svg class="icon"><use href="#icon-download"/></svg>
+      </button>
+      <button class="gallery-btn g-btn-del" onclick="deleteGalleryItem(${idx})" title="删除">
+        <svg class="icon"><use href="#icon-trash"/></svg>
+      </button>
+    </div>
+  </div>`;
+}
+
 function renderComfyGallery() {
   const grid = document.getElementById('galleryGrid');
   const empty = document.getElementById('galleryEmpty');
@@ -1853,21 +1920,34 @@ function renderComfyGallery() {
     return;
   }
   if (empty) empty.style.display = 'none';
-  grid.innerHTML = comfyGallery.map((item, idx) => {
-    const hasBadge = item.badge !== undefined && item.badge !== null && String(item.badge) !== '';
-    return `<div class="gallery-item" onclick="openGalleryModal(${idx})">
-      <img src="${item.url}" alt="gallery" loading="lazy">
-      <div class="gallery-bar" onclick="event.stopPropagation()">
-        ${hasBadge ? `<span class="gallery-idx">#${escapeHtml(String(item.badge))}</span>` : ''}
-        <button class="gallery-btn" onclick="downloadGalleryImg(${idx})" title="下载原图">
-          <svg class="icon"><use href="#icon-download"/></svg>
-        </button>
-        <button class="gallery-btn g-btn-del" onclick="deleteGalleryItem(${idx})" title="删除">
-          <svg class="icon"><use href="#icon-trash"/></svg>
-        </button>
-      </div>
-    </div>`;
-  }).join('');
+
+  const cols = _galleryColsForWidth();
+  const gridW = grid.clientWidth || 1040;
+  const colW = Math.max(80, (gridW - GALLERY_GAP * (cols - 1)) / cols);
+
+  // 贪心分列：每张放进当前累计高度最小的列
+  const buckets = [];
+  for (let i = 0; i < cols; i++) buckets.push({ h: 0, idxs: [] });
+  comfyGallery.forEach((item, idx) => {
+    let t = 0;
+    for (let i = 1; i < buckets.length; i++) if (buckets[i].h < buckets[t].h) t = i;
+    buckets[t].idxs.push(idx);
+    buckets[t].h += _galleryAspectOf(item) * colW + GALLERY_GAP;
+  });
+
+  // 空列容器也保留：否则图少于列数时，仅存的列会被 flex 拉伸到整宽
+  grid.innerHTML = buckets
+    .map(b => `<div class="gallery-col">${b.idxs.map(i => _galleryItemHTML(comfyGallery[i], i)).join('')}</div>`)
+    .join('');
+}
+
+// 窗口尺寸变化时列数可能改变，重排一次
+if (typeof window !== 'undefined' && !window.__pgGalleryResizeBound) {
+  window.__pgGalleryResizeBound = true;
+  window.addEventListener('resize', () => {
+    if (_galleryRelayoutTimer) return;
+    _galleryRelayoutTimer = setTimeout(() => { _galleryRelayoutTimer = null; renderComfyGallery(); }, 220);
+  });
 }
 
 function addToComfyGallery(imgUrl, badge, prompt, seed) {
@@ -2049,6 +2129,7 @@ async function _prepareOnePrompt(idx, startTime, completed, total, wf) {
   const useAi = document.getElementById('aiToggle') && document.getElementById('aiToggle').checked;
   if (comfyStopped) return { cn: '', en: '' };
   try {
+    rollIdentity();   // 本组提示词抽一次身份，中英文共用
     let promptText = '';
     let picks = [];
     // Treat undefined as enabled, consistent with renderCategories()

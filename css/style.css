@@ -501,19 +501,18 @@ h1 { display: none; }
   border: 1px solid var(--border-strong); background: var(--surface); color: var(--text2);
 }
 .gallery-clear-btn:hover { color: var(--red); border-color: var(--red); }
-/* 瀑布流排布：列宽一致，图片按原比例依次往下排并自动填缝（完整显示不裁切） */
-.gallery-grid { column-count: 4; column-gap: 12px; }
+/* 瀑布流：列容器由 JS 生成（列数 & 分列见 renderComfyGallery），每列等宽、列内纵向排列 */
+.gallery-grid { display: flex; align-items: flex-start; gap: 12px; }
+.gallery-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .gallery-item {
-  position: relative; break-inside: avoid; -webkit-column-break-inside: avoid;
-  margin: 0 0 12px; border-radius: var(--radius-card); overflow: hidden;
+  position: relative; border-radius: var(--radius-card); overflow: hidden;
   cursor: pointer; background: var(--surface2);
   border: 1px solid var(--border);
   transition: box-shadow .2s ease, border-color .2s ease;
 }
 .gallery-item:hover { box-shadow: var(--shadow-md); border-color: var(--border-strong); }
+/* 图片按原比例完整显示，不裁切 */
 .gallery-item img { width: 100%; height: auto; display: block; }
-@media (max-width: 900px) { .gallery-grid { column-count: 3; } }
-@media (max-width: 620px) { .gallery-grid { column-count: 2; } }
 
 /* 序号（纯文字）+ 下载/删除（白描边图标按钮）同在底部一行 */
 .gallery-bar {
