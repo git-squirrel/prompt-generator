@@ -2069,8 +2069,13 @@ async function _prepareOnePrompt(idx, startTime, completed, total, wf) {
       if (!promptText) { showToast('⚠️ 提示词为空', 'error'); return { cn: '', en: '' }; }
     }
     if (comfySettings.language === 'en') {
+      // 修复：英文模式只把英文写进英文框，中文框填同一组词条的中文对照
+      // （原来两个框都写英文，optimizePrompt 按中文模板处理后会变成中英混杂）
       enArea.value = promptText;
-      cnArea.value = promptText;
+      if (picks.length) {
+        cnArea.value = getIdentityPrefix() + '，' + picks.map(p => p.cn).join('，');
+      }
+      // picks 为空（手填英文提示词）时保留中文框原内容，不覆盖
     } else {
       cnArea.value = promptText;
       // Reuse the same picks that generated promptText for consistent CN->EN mapping
@@ -2090,10 +2095,11 @@ async function _prepareOnePrompt(idx, startTime, completed, total, wf) {
       await aiPolish();
       await new Promise(r => setTimeout(r, 100));
     }
-    const cnFinal = comfySettings.language === 'en' ? '' : (cnArea.value.trim() || '');
-    const enFinal = comfySettings.language === 'en' ? (enArea.value.trim() || '') : enArea.value.trim();
-    const finalPromptText = comfySettings.language === 'en' ? enFinal : cnFinal;
-    return { cn: finalPromptText, en: finalPromptText === cnFinal ? enFinal : cnFinal, rawCn: cnArea.value.trim(), rawEn: enArea.value.trim() };
+    const cnFinal = cnArea.value.trim();
+    const enFinal = enArea.value.trim();
+    // 修复：原写法在 language==='en' 时会把 en 恒置为 ''，
+    // 导致下游取 currentPrompt.en 得到空串，被误判为“提示词为空”而跳过。
+    return { cn: cnFinal || enFinal, en: enFinal || cnFinal, rawCn: cnFinal, rawEn: enFinal };
   } catch (e) {
     console.warn('[_prepareOnePrompt] Error:', e.message);
     return { cn: '', en: '' };
@@ -2143,8 +2149,15 @@ async function startComfyGeneration() {
         prepPromise = _prepareOnePrompt(p + 1, startTime, completed, total, wf);
       }
 
-      const finalPrompt = comfySettings.language === 'en' ? currentPrompt.en : currentPrompt.cn;
-      if (!finalPrompt) { showToast('⚠️ 提示词为空，跳过', 'error'); continue; }
+      const finalPrompt = currentPrompt
+        ? (comfySettings.language === 'en' ? currentPrompt.en : currentPrompt.cn)
+        : '';
+      if (!finalPrompt) {
+        showToast('⚠️ 提示词为空，跳过', 'error');
+        // 修复：先取回预取结果再 continue，否则下一轮 currentPrompt 会变成 null
+        if (prepPromise) nextPrompt = await prepPromise;
+        continue;
+      }
 
       const batchResults = [];
       for (let b = 0; b < comfySettings.batchCount; b++) {
@@ -2183,7 +2196,7 @@ async function startComfyGeneration() {
 
       if (prepPromise) {
         nextPrompt = await prepPromise;
-        if (!nextPrompt.cn) { showToast('⚠️ 提示词准备失败', 'error'); break; }
+        if (!nextPrompt || !nextPrompt.cn) { showToast('⚠️ 提示词准备失败', 'error'); break; }
       }
     }
 
