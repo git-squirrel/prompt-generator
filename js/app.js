@@ -1854,12 +1854,17 @@ function renderComfyGallery() {
   }
   if (empty) empty.style.display = 'none';
   grid.innerHTML = comfyGallery.map((item, idx) => {
-    return `<div class="gallery-item">
-      <img src="${item.url}" alt="gallery" loading="lazy" onclick="openGalleryModal(${idx})">
-      ${item.badge ? `<span class="gallery-badge">#${item.badge}</span>` : ''}
-      <div class="gallery-item-actions">
-        <button onclick="event.stopPropagation();downloadGalleryImg(${idx})" title="下载">⬇️</button>
-        <button class="btn-g-del" onclick="event.stopPropagation();deleteGalleryItem(${idx})" title="删除">✕</button>
+    const hasBadge = item.badge !== undefined && item.badge !== null && String(item.badge) !== '';
+    return `<div class="gallery-item" onclick="openGalleryModal(${idx})">
+      <img src="${item.url}" alt="gallery" loading="lazy">
+      <div class="gallery-bar" onclick="event.stopPropagation()">
+        ${hasBadge ? `<span class="gallery-idx">#${escapeHtml(String(item.badge))}</span>` : ''}
+        <button class="gallery-btn" onclick="downloadGalleryImg(${idx})" title="下载原图">
+          <svg class="icon"><use href="#icon-download"/></svg>
+        </button>
+        <button class="gallery-btn g-btn-del" onclick="deleteGalleryItem(${idx})" title="删除">
+          <svg class="icon"><use href="#icon-trash"/></svg>
+        </button>
       </div>
     </div>`;
   }).join('');
