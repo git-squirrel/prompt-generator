@@ -83,7 +83,8 @@ Windows 用户也可直接双击 `start_server.bat`。
 ### 润色模板管理
 - 6 组模板：中文润色、英文润色、皮肤描述、画质描述
 - 可添加/删除自定义模板
-<img width="1578" height="1232" alt="image" src="https://github.com/user-attachments/assets/bafce7c5-ea19-46dd-8342-5d4aa5b20695" />
+<img width="1393" height="1168" alt="image" src="https://github.com/user-attachments/assets/73d2cae0-bdf5-4259-8db9-70d12fcb1763" />
+
 
 ### AI 润色设置
 | 厂商 | 类型 | 说明 |
@@ -141,7 +142,9 @@ AI 润色的时间被「隐藏」在 ComfyUI 生图的背后，多组生图的�
 - 实时进度显示（步骤/时间）
 - 生图画廊：查看、下载、删除
 - 查看每张图片的提示词和种子
-<img width="1983" height="1117" alt="image" src="https://github.com/user-attachments/assets/8a1c1ca7-6ffe-4afb-ad56-271cfa0d9568" />
+<img width="1371" height="439" alt="image" src="https://github.com/user-attachments/assets/6975efd0-ddcc-4388-adeb-19d28110c1b7" />
+<img width="1375" height="662" alt="image" src="https://github.com/user-attachments/assets/052a4a92-6b89-47d5-8133-ac7fdc68e9ee" />
+
 
 ### 数据管理
 - 自动保存到 JSON 文件（无需数据库）
