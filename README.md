@@ -131,11 +131,8 @@ Windows 用户也可直接双击 `start_server.bat`。
 ```
 中文：山水，写实 大师级摄影作品，完美曝光，构图精妙
 ```
+<img width="1382" height="1221" alt="image" src="https://github.com/user-attachments/assets/4f52bfee-ba48-4ac4-846c-56774f8ff27c" />
 
-<img width="2600" height="1418" alt="润色模板组" src="preview-template-groups.png" />
-<img width="2600" height="1418" alt="模板组跳过与停用状态" src="preview-template-groups-off.png" />
-
-> 旧版 6 个扁平模板（中文润色 / 英文润色 / 皮肤 / 画质）会在首次打开时**自动迁移**成三个模板组，原有内容不丢失。
 
 ### AI 润色设置
 | 厂商 | 类型 | 说明 |
