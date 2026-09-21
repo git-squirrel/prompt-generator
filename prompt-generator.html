@@ -121,6 +121,14 @@
 
   <!-- Identity Bar -->
   <div class="identity-bar" id="identityBar">
+    <div class="identity-master">
+      <span class="im-label">人物身份</span>
+      <label class="toggle" title="关闭后提示词不再添加年龄/地区/性别">
+        <input type="checkbox" id="identityEnabledToggle" checked onchange="toggleIdentityEnabled(this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="identity-fields" id="identityFields">
     <div class="age-group">
       <span class="ilabel">年龄</span>
       <input type="range" id="ageSlider" min="18" max="49" value="25" oninput="updateAgeDisplay()">
@@ -146,6 +154,7 @@
         随机
       </label>
     </div>
+    </div><!-- /identity-fields -->
     <span class="ipreview" id="identityPreview">中国，25岁</span>
   </div>
 

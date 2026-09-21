@@ -10,7 +10,9 @@
 
 let CN_EN_MAP = {};
 let IDENTITY_EN = {'中国':'Chinese','韩国':'Korean','日本':'Japanese','欧美':'Western','女':'Female','男':'Male'};
-let enrichCN = [], enrichEN = [], skinCN = [], skinEN = [], qualityCN = [], qualityEN = [];
+// 润色模板组（动态可增删，结构定义见 SECTION 5）
+let enrichGroups = [];
+let _enrichGroupSeq = 1;
 
 let promptsEnabled = {};
 let DATA = null;
@@ -27,6 +29,8 @@ const STORAGE_TO_SERVER = {
   identity_age_random: 'pg_identity_age_random',
   identity_region_random: 'pg_identity_region_random',
   identity_gender_random: 'pg_identity_gender_random',
+  identity_enabled: 'pg_identity_enabled',
+  enrich_groups: 'pg_enrich_groups',
   enrichCN: 'pg_enrichCN',
   enrichEN: 'pg_enrichEN',
   skinCN: 'pg_skinCN',
@@ -46,7 +50,7 @@ function serverKey(shortName) {
 }
 
 const SERVER_KEYS = {
-  prompts: ['prompts_data','prompts_data_enabled','identity_regions','identity_genders','identity_age','identity_age_random','identity_region_random','identity_gender_random','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'],
+  prompts: ['prompts_data','prompts_data_enabled','identity_regions','identity_genders','identity_age','identity_age_random','identity_region_random','identity_gender_random','identity_enabled','enrich_groups','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'],
   ai: ['ai_settings','ai_preset','ai_history'],
   comfy: ['comfy_settings','comfy_workflows','comfy_gallery']
 };
@@ -88,6 +92,8 @@ function showToast(msg, type) {
 
 let identityRegions = [], identityGenders = [], identityAge = {};
 let identityAgeRandom = false, identityRegionRandom = false, identityGenderRandom = false;
+// 人物身份总开关：关闭后提示词不添加 年龄/地区/性别（用于生成无人物画面）
+let identityEnabled = true;
 
 function defaultIdentityRegions() { return ['中国', '韩国', '日本', '欧美']; }
 function defaultIdentityGenders() { return ['女', '男']; }
@@ -127,11 +133,13 @@ function _resolveIdentityValues(forceFresh) {
 function rollIdentity() { return _resolveIdentityValues(true); }
 
 function getIdentityPrefix() {
+  if (!identityEnabled) return '';
   const { age, region, gender } = _resolveIdentityValues();
   return `${region}，${age}岁${gender ? '，' + gender : ''}`;
 }
 
 function getIdentityEn() {
+  if (!identityEnabled) return '';
   const { age, region, gender } = _resolveIdentityValues();
   const rf = IDENTITY_EN[region] || region;
   const gf = gender ? (IDENTITY_EN[gender] || gender) : '';
@@ -155,6 +163,7 @@ function updateIdentityPreview() {
   if (ageRandomToggle) identityAgeRandom = ageRandomToggle.checked;
   if (regionRandomToggle) identityRegionRandom = regionRandomToggle.checked;
   if (genderRandomToggle) identityGenderRandom = genderRandomToggle.checked;
+  if (!identityEnabled) { preview.textContent = '身份已关闭'; return; }
   rollIdentity();   // 预览每次重新抽，保证中英文一致
   preview.textContent = getIdentityPrefix();
 }
@@ -170,10 +179,14 @@ function loadIdentitySettings() {
   identityAgeRandom = storage.getBool('identity_age_random');
   identityRegionRandom = storage.getBool('identity_region_random');
   identityGenderRandom = storage.getBool('identity_gender_random');
+  const _ieRaw = storage.getRaw('identity_enabled');
+  identityEnabled = _ieRaw === null ? true : _ieRaw === 'true';
 }
 
 function saveIdentitySettings() {
   // Read checkbox states from DOM and sync to variables before saving
+  const masterToggle = document.getElementById('identityEnabledToggle');
+  if (masterToggle) identityEnabled = masterToggle.checked;
   const ageRandomToggle = document.getElementById('ageRandomToggle');
   const regionRandomToggle = document.getElementById('regionRandomToggle');
   const genderRandomToggle = document.getElementById('genderRandomToggle');
@@ -187,8 +200,22 @@ function saveIdentitySettings() {
   storage.setBool('identity_age_random', identityAgeRandom);
   storage.setBool('identity_region_random', identityRegionRandom);
   storage.setBool('identity_gender_random', identityGenderRandom);
+  storage.setBool('identity_enabled', identityEnabled);
   syncAllToServer();
   updateIdentityPreview();
+}
+
+// 人物身份总开关
+function toggleIdentityEnabled(on) {
+  identityEnabled = !!on;
+  // 先同步复选框，再让 saveIdentitySettings 以此为权威（否则会被 DOM 旧状态覆盖）
+  const t = document.getElementById('identityEnabledToggle');
+  if (t) t.checked = identityEnabled;
+  saveIdentitySettings();
+  renderIdentityBar();
+  showToast(identityEnabled
+    ? '✅ 已开启人物身份'
+    : '🚫 已关闭人物身份，提示词不再添加年龄/地区/性别', 'success');
 }
 
 function renderIdentityBar() {
@@ -221,6 +248,10 @@ function renderIdentityBar() {
   if (ageRandomToggle) ageRandomToggle.checked = identityAgeRandom;
   if (regionRandomToggle) regionRandomToggle.checked = identityRegionRandom;
   if (genderRandomToggle) genderRandomToggle.checked = identityGenderRandom;
+  const masterToggle = document.getElementById('identityEnabledToggle');
+  if (masterToggle) masterToggle.checked = identityEnabled;
+  const bar = document.getElementById('identityBar');
+  if (bar) bar.classList.toggle('identity-off', !identityEnabled);
   updateIdentityPreview();
 }
 
@@ -306,124 +337,213 @@ function saveAgeRange() {
 }
 
 // ============================================================
-// SECTION 5: Enrich Template Management
+// ============================================================
+// SECTION 5: Enrich Template Groups（可自定义增删的润色模板组）
+//   每组: { id, name, icon, color, on: 是否参与优化, person: 人物相关, cn: [], en: [] }
 // ============================================================
 
-const ENRICH_TYPES = [
-  { key: 'enrichCN', label: '🌄 场景描述 (CN)', color: '#7c5cfc' },
-  { key: 'enrichEN', label: '🌄 Scene Description (EN)', color: '#a78bfa' },
-  { key: 'skinCN', label: '👩 皮肤描述 (CN)', color: '#f59e0b' },
-  { key: 'skinEN', label: '👩 Skin Description (EN)', color: '#fbbf24' },
-  { key: 'qualityCN', label: '✨ 画质描述 (CN)', color: '#34d399' },
-  { key: 'qualityEN', label: '✨ Quality Description (EN)', color: '#6ee7b7' }
-];
+function defaultEnrichGroups() {
+  return [
+    { id: 'enrich',  name: '画面描述', icon: '🌄', color: '#7c5cfc', on: true, person: false, cn: [], en: [] },
+    { id: 'skin',    name: '皮肤描述', icon: '👩', color: '#f59e0b', on: true, person: true,  cn: [], en: [] },
+    { id: 'quality', name: '画质描述', icon: '✨', color: '#34d399', on: true, person: false, cn: [], en: [] }
+  ];
+}
 
-function getEnrichArray(key) {
-  switch (key) {
-    case 'enrichCN': return enrichCN;
-    case 'enrichEN': return enrichEN;
-    case 'skinCN': return skinCN;
-    case 'skinEN': return skinEN;
-    case 'qualityCN': return qualityCN;
-    case 'qualityEN': return qualityEN;
-    default: return [];
-  }
+function genEnrichGroupId() { return 'g' + Date.now().toString(36) + (_enrichGroupSeq++); }
+
+function findEnrichGroup(id) { return enrichGroups.find(g => g.id === id) || null; }
+
+// 该组本次是否参与「优化」：需已启用；若标记为人物相关，则「人物身份」关闭时跳过
+function enrichGroupActive(g) {
+  if (!g || g.on === false) return false;
+  if (g.person && !identityEnabled) return false;
+  return true;
+}
+
+function normalizeEnrichGroups(list) {
+  return (Array.isArray(list) ? list : []).filter(g => g && typeof g === 'object').map(g => ({
+    id: String(g.id || genEnrichGroupId()),
+    name: String(g.name || '未命名组'),
+    icon: String(g.icon || '📄'),
+    color: String(g.color || '#8d8d8d'),
+    on: g.on !== false,
+    person: !!g.person,
+    cn: Array.isArray(g.cn) ? g.cn.slice() : [],
+    en: Array.isArray(g.en) ? g.en.slice() : []
+  }));
+}
+
+// 旧版 6 个扁平数组（enrichCN/enrichEN/skinCN/enrichEN/qualityCN/qualityEN）→ 模板组
+function migrateLegacyEnrich(srcObj) {
+  const get = k => Array.isArray(srcObj && srcObj[k]) ? srcObj[k].slice() : [];
+  const groups = defaultEnrichGroups();
+  groups[0].cn = get('enrichCN');  groups[0].en = get('enrichEN');
+  groups[1].cn = get('skinCN');    groups[1].en = get('skinEN');
+  groups[2].cn = get('qualityCN'); groups[2].en = get('qualityEN');
+  return groups;
+}
+
+// 读取模板组：优先新格式，否则从旧格式迁移（兼容老数据/老导出文件）
+function loadEnrichGroups(serverLegacy) {
+  const saved = storage.get('enrich_groups');
+  if (Array.isArray(saved) && saved.length) { enrichGroups = normalizeEnrichGroups(saved); return; }
+  const pick = k => {
+    const s = (serverLegacy && Array.isArray(serverLegacy[k]) && serverLegacy[k].length) ? serverLegacy[k] : null;
+    if (s) return s;
+    const ls = storage.get(k);
+    return Array.isArray(ls) ? ls : [];
+  };
+  enrichGroups = migrateLegacyEnrich({
+    enrichCN: pick('enrichCN'),   enrichEN: pick('enrichEN'),
+    skinCN: pick('skinCN'),       skinEN: pick('skinEN'),
+    qualityCN: pick('qualityCN'), qualityEN: pick('qualityEN')
+  });
 }
 
 function saveEnrichData() {
-  storage.set('enrichCN', enrichCN);
-  storage.set('enrichEN', enrichEN);
-  storage.set('skinCN', skinCN);
-  storage.set('skinEN', skinEN);
-  storage.set('qualityCN', qualityCN);
-  storage.set('qualityEN', qualityEN);
+  storage.set('enrich_groups', enrichGroups);
   syncAllToServer();
 }
 
 function renderEnrichManagement() {
   const container = document.getElementById('enrichMgmtContainer');
   if (!container) return;
-  container.innerHTML = '';
-  ENRICH_TYPES.forEach(entry => {
-    const arr = getEnrichArray(entry.key);
-    const section = document.createElement('div');
-    section.style.cssText = 'margin-bottom:10px;border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--surface2);';
 
-    const header = document.createElement('div');
-    header.style.cssText = 'font-size:12px;font-weight:600;color:' + entry.color + ';margin-bottom:5px;display:flex;align-items:center;justify-content:space-between;';
-    header.innerHTML = `<span>${entry.label}</span><span style="font-size:10px;color:var(--text2);">${arr.length} 条</span>`;
-    section.appendChild(header);
+  const head = `<div class="eg-top">
+      <span class="eg-note">「启用」= 该组是否参与「优化」；「人物相关」的组，在「人物身份」总开关关闭时自动跳过</span>
+      <input id="newEnrichGroupName" class="eg-newinput" placeholder="新组名称，如 氛围描述"
+             onkeydown="if(event.key==='Enter')addEnrichGroup()">
+      <button class="btn btn-sm btn-add eg-newbtn" onclick="addEnrichGroup()">+ 新建组</button>
+    </div>`;
 
-    const list = document.createElement('div');
-    list.style.cssText = 'display:flex;flex-direction:column;gap:3px;margin-bottom:6px;max-height:150px;overflow-y:auto;';
-    if (arr.length === 0) {
-      const empty = document.createElement('div');
-      empty.style.cssText = 'font-size:10px;color:var(--text2);padding:4px 0;';
-      empty.textContent = '(空)';
-      list.appendChild(empty);
-    } else {
-      arr.forEach((item, idx) => {
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:center;gap:4px;';
-        const text = document.createElement('span');
-        text.style.cssText = 'flex:1;font-size:10px;color:var(--text);word-break:break-all;line-height:1.3;';
-        text.textContent = item;
-        const delBtn = document.createElement('button');
-        delBtn.textContent = '✕';
-        delBtn.style.cssText = 'flex-shrink:0;background:none;border:none;color:var(--red);cursor:pointer;font-size:10px;padding:1px 4px;border-radius:3px;';
-        delBtn.onmouseenter = () => { delBtn.style.background = 'rgba(239,68,68,.15)'; };
-        delBtn.onmouseleave = () => { delBtn.style.background = 'none'; };
-        delBtn.onclick = () => deleteEnrichItem(entry.key, idx);
-        row.appendChild(text);
-        row.appendChild(delBtn);
-        list.appendChild(row);
-      });
-    }
-    section.appendChild(list);
+  const body = enrichGroups.map(g => {
+    const active = enrichGroupActive(g);
+    const skipped = !!(g.person && !identityEnabled);
+    const cls = ['eg-group'];
+    if (g.on === false) cls.push('eg-off');
+    if (skipped) cls.push('eg-skipped');
+    const listHtml = lang => {
+      const arr = Array.isArray(g[lang]) ? g[lang] : [];
+      if (!arr.length) return `<div class="eg-empty">(空)</div>`;
+      return arr.map((t, i) => `<div class="eg-item">
+          <span class="eg-tag">${lang.toUpperCase()}</span>
+          <span class="eg-text">${escapeHtml(String(t))}</span>
+          <button class="eg-del" title="删除该条" onclick="deleteEnrichItem('${g.id}','${lang}',${i})">✕</button>
+        </div>`).join('');
+    };
+    return `<div class="${cls.join(' ')}">
+      <div class="eg-head">
+        <span class="eg-name">${escapeHtml(g.icon || '📄')} ${escapeHtml(g.name)}</span>
+        <span class="eg-count">CN ${(g.cn || []).length} · EN ${(g.en || []).length}</span>
+        <span class="eg-sp"></span>
+        ${skipped ? '<span class="eg-badge">已跳过</span>' : (g.on === false ? '<span class="eg-badge eg-badge-off">已停用</span>' : '')}
+        <label class="eg-chk${g.on !== false ? ' on' : ''}">
+          <input type="checkbox" ${g.on !== false ? 'checked' : ''}
+                 onchange="toggleEnrichGroup('${g.id}','on',this.checked)"> 启用
+        </label>
+        <label class="eg-chk${g.person ? ' warn' : ''}">
+          <input type="checkbox" ${g.person ? 'checked' : ''}
+                 onchange="toggleEnrichGroup('${g.id}','person',this.checked)"> 人物相关
+        </label>
+        <button class="eg-rmgroup" onclick="deleteEnrichGroup('${g.id}')">删除组</button>
+      </div>
+      <div class="eg-list">${listHtml('cn')}${listHtml('en')}</div>
+      <div class="eg-addrow">
+        <input id="egAddCN_${g.id}" class="eg-add" placeholder="添加中文模板..."
+               onkeydown="if(event.key==='Enter')addEnrichItem('${g.id}','cn')">
+        <input id="egAddEN_${g.id}" class="eg-add" placeholder="添加英文模板..."
+               onkeydown="if(event.key==='Enter')addEnrichItem('${g.id}','en')">
+        <button class="btn btn-sm btn-add" onclick="addEnrichBoth('${g.id}')">添加</button>
+      </div>
+    </div>`;
+  }).join('');
 
-    const addRow = document.createElement('div');
-    addRow.style.cssText = 'display:flex;gap:4px;';
-    const input = document.createElement('input');
-    input.id = 'enrichInput_' + entry.key;
-    input.placeholder = '输入新模板...';
-    input.style.cssText = 'flex:1;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:11px;outline:none;font-family:inherit;';
-    input.onkeydown = (e) => { if (e.key === 'Enter') addEnrichItem(entry.key); };
-    const addBtn = document.createElement('button');
-    addBtn.textContent = '添加';
-    addBtn.style.cssText = 'flex-shrink:0;background:' + entry.color + ';color:#fff;border:none;border-radius:4px;padding:4px 8px;font-size:10px;cursor:pointer;font-family:inherit;';
-    addBtn.onclick = () => addEnrichItem(entry.key);
-    addRow.appendChild(input);
-    addRow.appendChild(addBtn);
-    section.appendChild(addRow);
-
-    container.appendChild(section);
-  });
+  container.innerHTML = head + body;
 }
 
-function addEnrichItem(key) {
-  const input = document.getElementById('enrichInput_' + key);
+function addEnrichGroup() {
+  const input = document.getElementById('newEnrichGroupName');
+  const name = (input && input.value.trim()) || '';
+  if (!name) { showToast('⚠️ 请先输入组名称', 'error'); return; }
+  if (enrichGroups.some(g => g.name === name)) { showToast('⚠️ 已存在同名模板组', 'error'); return; }
+  const palette = ['#8b5cf6', '#4d6bfe', '#10b981', '#f59e0b', '#14b8a6', '#a855f7', '#f97316', '#ef4444'];
+  enrichGroups.push({
+    id: genEnrichGroupId(), name, icon: '📄',
+    color: palette[enrichGroups.length % palette.length],
+    on: true, person: false, cn: [], en: []
+  });
+  saveEnrichData();
+  renderEnrichManagement();
+  showToast(`✅ 已新建模板组「${name}」`, 'success');
+}
+
+function deleteEnrichGroup(id) {
+  const g = findEnrichGroup(id);
+  if (!g) return;
+  const n = (Array.isArray(g.cn) ? g.cn.length : 0) + (Array.isArray(g.en) ? g.en.length : 0);
+  if (!confirm(`删除模板组「${g.name}」及其中的 ${n} 条模板？`)) return;
+  enrichGroups = enrichGroups.filter(x => x.id !== id);
+  saveEnrichData();
+  renderEnrichManagement();
+  showToast('🗑️ 已删除模板组', 'success');
+}
+
+function toggleEnrichGroup(id, field, val) {
+  const g = findEnrichGroup(id);
+  if (!g) return;
+  g[field] = !!val;
+  saveEnrichData();
+  renderEnrichManagement();
+}
+
+function addEnrichItem(groupId, lang, silentIfEmpty) {
+  const g = findEnrichGroup(groupId);
+  if (!g) return;
+  const input = document.getElementById('egAdd' + lang.toUpperCase() + '_' + groupId);
   if (!input) return;
   const value = input.value.trim();
-  if (!value) { showToast('⚠️ 模板内容不能为空', 'error'); return; }
-  const arr = getEnrichArray(key);
-  arr.push(value);
+  if (!value) { if (!silentIfEmpty) showToast('⚠️ 模板内容不能为空', 'error'); return; }
+  if (!Array.isArray(g[lang])) g[lang] = [];
+  g[lang].push(value);
   input.value = '';
+  saveEnrichData();
+  renderEnrichManagement();
+  if (!silentIfEmpty) showToast('✅ 已添加模板', 'success');
+}
+
+// 「添加」按钮：中英文输入框谁有内容就加谁
+function addEnrichBoth(groupId) {
+  const g = findEnrichGroup(groupId);
+  if (!g) return;
+  let added = 0;
+  [['cn', 'CN'], ['en', 'EN']].forEach(([lang, up]) => {
+    const input = document.getElementById('egAdd' + up + '_' + groupId);
+    if (!input) return;
+    const v = input.value.trim();
+    if (!v) return;
+    if (!Array.isArray(g[lang])) g[lang] = [];
+    g[lang].push(v);
+    input.value = '';
+    added++;
+  });
+  if (!added) { showToast('⚠️ 模板内容不能为空', 'error'); return; }
   saveEnrichData();
   renderEnrichManagement();
   showToast('✅ 已添加模板', 'success');
 }
 
-function deleteEnrichItem(key, idx) {
-  const arr = getEnrichArray(key);
-  if (idx < 0 || idx >= arr.length) return;
-  const item = arr[idx];
-  if (!confirm(`确定删除此模板？\n「${item.slice(0, 60)}」`)) return;
-  arr.splice(idx, 1);
+function deleteEnrichItem(groupId, lang, idx) {
+  const g = findEnrichGroup(groupId);
+  if (!g || !Array.isArray(g[lang])) return;
+  if (idx < 0 || idx >= g[lang].length) return;
+  const item = g[lang][idx];
+  if (!confirm(`确定删除此模板？\n「${String(item).slice(0, 60)}」`)) return;
+  g[lang].splice(idx, 1);
   saveEnrichData();
   renderEnrichManagement();
   showToast('🗑️ 已删除模板', 'success');
 }
-
 // ============================================================
 // SECTION 6: Prompt Generation
 // ============================================================
@@ -446,7 +566,7 @@ function randomPrompt() {
   enabledCats.forEach(cat => { if (cat.items.length) picks.push(cat.items[Math.floor(Math.random() * cat.items.length)]); });
   if (!picks.length) { showToast('⚠️ 已开启的类别中没有词条', 'error'); return; }
   const identity = getIdentityPrefix();
-  const cn = identity + '，' + picks.map(p => p.cn).join('，');
+  const cn = [identity].concat(picks.map(p => p.cn)).filter(Boolean).join('，');
   setPrompt(cn, picks);
   showToast(`✅ 已生成，共 ${enabledCats.length} 个类别`, 'success');
 }
@@ -461,7 +581,7 @@ function syncEn(cnText, usedItems) {
   let en = '';
   if (usedItems && usedItems.length) {
     const idEn = getIdentityEn();
-    en = idEn + ', ' + usedItems.map(p => p.en.split('/')[0].trim()).join(', ');
+    en = [idEn].concat(usedItems.map(p => p.en.split('/')[0].trim())).filter(Boolean).join(', ');
   } else {
     const segs = cnText.split(/[，,]\s*/).map(s => s.trim()).filter(Boolean);
     en = segs.map(s => {
@@ -479,15 +599,16 @@ function optimizePrompt() {
   if (!cnText) { showToast('⚠️ 提示词为空，请先生成', 'error'); return; }
   const segments = cnText.split(/[，,]/).map(s => s.trim()).filter(Boolean);
 
-  const hasSceneCN = enrichCN.length > 0, hasSceneEN = enrichEN.length > 0;
-  const hasSkinCN = skinCN.length > 0, hasSkinEN = skinEN.length > 0;
-  const hasQualCN = qualityCN.length > 0, hasQualEN = qualityEN.length > 0;
-  if (!hasSceneCN && !hasSkinCN && !hasQualCN) {
-    alert('⚠️ 所有中文描述模板都为空，请先在「管理类别与提示词」→ 润色模板中添加内容');
+  // 参与本次优化的模板组：需「启用」；标记为「人物相关」的组在「人物身份」关闭时跳过
+  const egActive = enrichGroups.filter(g => enrichGroupActive(g));
+  const egHasCN = egActive.some(g => Array.isArray(g.cn) && g.cn.length);
+  const egHasEN = egActive.some(g => Array.isArray(g.en) && g.en.length);
+  if (!egHasCN) {
+    alert('⚠️ 没有可用的中文润色模板。请到「管理类别与提示词」→ 润色模板检查：各组是否已启用、组内是否有内容、是否被「人物身份」总开关跳过');
     return;
   }
-  if (!hasSceneEN && !hasSkinEN && !hasQualEN) {
-    alert('⚠️ 所有英文描述模板都为空，请先在「管理类别与提示词」→ 润色模板中添加内容');
+  if (!egHasEN) {
+    alert('⚠️ 没有可用的英文润色模板。请到「管理类别与提示词」→ 润色模板检查：各组是否已启用、组内是否有内容、是否被「人物身份」总开关跳过');
     return;
   }
 
@@ -501,12 +622,21 @@ function optimizePrompt() {
   const bodySegments = segments.slice(identityEnd);
   const idEn = getIdentityEn();
 
-  const base = hasSceneCN ? enrichCN[Math.floor(Math.random() * enrichCN.length)] : '';
-  const skin = hasSkinCN ? skinCN[Math.floor(Math.random() * skinCN.length)] : '';
-  const qual = hasQualCN ? qualityCN[Math.floor(Math.random() * qualityCN.length)] : '';
-  const baseEn = hasSceneEN ? enrichEN[Math.floor(Math.random() * enrichEN.length)] : '';
-  const skinEn = hasSkinEN ? skinEN[Math.floor(Math.random() * skinEN.length)] : '';
-  const qualEn = hasQualEN ? qualityEN[Math.floor(Math.random() * qualityEN.length)] : '';
+  // 位置规则（与旧版输出一致）：
+  //   「画面描述」组 → 提示词最前；「画质描述」组 → 提示词最后；
+  //   其余组（皮肤描述 + 用户自建组）→ 按组顺序接在正文之后
+  const pickT = (g, lang) => (g && Array.isArray(g[lang]) && g[lang].length)
+    ? g[lang][Math.floor(Math.random() * g[lang].length)] : '';
+  const egFront = egActive.find(g => g.id === 'enrich') || null;
+  const egTail  = egActive.find(g => g.id === 'quality') || null;
+  const egMid   = egActive.filter(g => g !== egFront && g !== egTail);
+
+  const base   = pickT(egFront, 'cn');
+  const qual   = pickT(egTail, 'cn');
+  const midCn  = egMid.map(g => pickT(g, 'cn')).filter(Boolean);
+  const baseEn = pickT(egFront, 'en');
+  const qualEn = pickT(egTail, 'en');
+  const midEn  = egMid.map(g => pickT(g, 'en')).filter(Boolean);
 
   const identityCn = segments.slice(0, identityEnd).join('，');
   const bodyCn = bodySegments.join('，');
@@ -514,7 +644,7 @@ function optimizePrompt() {
   if (base) optimizedCn += base + ' ';
   if (identityCn) optimizedCn += identityCn + '，';
   optimizedCn += bodyCn;
-  if (skin) optimizedCn += '。' + skin;
+  if (midCn.length) optimizedCn += '。' + midCn.join('。');
   if (qual) optimizedCn += ' ' + qual;
 
   const enParts = bodySegments.map(s => {
@@ -527,7 +657,7 @@ function optimizePrompt() {
   if (baseEn) optimizedEn += baseEn + ' ';
   if (idEn) optimizedEn += idEn + ', ';
   optimizedEn += enParts.join(', ');
-  if (skinEn) optimizedEn += '. ' + skinEn;
+  if (midEn.length) optimizedEn += '. ' + midEn.join('. ');
   if (qualEn) optimizedEn += ' ' + qualEn;
 
   document.getElementById('promptArea').value = optimizedCn;
@@ -660,6 +790,7 @@ function syncAllToServer() {
 
 async function loadDataConstants() {
   if (!window.location.origin || !window.location.origin.startsWith('http')) {
+    loadEnrichGroups({});
     console.log('ℹ️ Data constants initialized (offline, using defaults)');
     return;
   }
@@ -674,44 +805,17 @@ async function loadDataConstants() {
         if (d.cn_en_map && typeof d.cn_en_map === 'object') {
           CN_EN_MAP = d.cn_en_map;
         }
-        if (d.enrich_data && typeof d.enrich_data === 'object') {
-          if (d.enrich_data.enrichCN) enrichCN = d.enrich_data.enrichCN;
-          if (d.enrich_data.enrichEN) enrichEN = d.enrich_data.enrichEN;
-          if (d.enrich_data.skinCN) skinCN = d.enrich_data.skinCN;
-          if (d.enrich_data.skinEN) skinEN = d.enrich_data.skinEN;
-          if (d.enrich_data.qualityCN) qualityCN = d.enrich_data.qualityCN;
-          if (d.enrich_data.qualityEN) qualityEN = d.enrich_data.qualityEN;
-        }
-        // Direct enrich keys as fallback
-        const enrichDirectMap = {
-          'pg_enrichCN': 'enrichCN', 'pg_enrichEN': 'enrichEN',
-          'pg_skinCN': 'skinCN', 'pg_skinEN': 'skinEN',
-          'pg_qualityCN': 'qualityCN', 'pg_qualityEN': 'qualityEN'
+        // 新版模板组（pg_enrich_groups）已在 loadAllFromServer 里进 localStorage；
+        // 这里只负责：本地/服务器都没有新版数据时，用旧版 6 个扁平键做一次性迁移
+        const legacyEnrich = {
+          enrichCN:  (d.enrich_data && d.enrich_data.enrichCN)  || d.pg_enrichCN,
+          enrichEN:  (d.enrich_data && d.enrich_data.enrichEN)  || d.pg_enrichEN,
+          skinCN:    (d.enrich_data && d.enrich_data.skinCN)    || d.pg_skinCN,
+          skinEN:    (d.enrich_data && d.enrich_data.skinEN)    || d.pg_skinEN,
+          qualityCN: (d.enrich_data && d.enrich_data.qualityCN) || d.pg_qualityCN,
+          qualityEN: (d.enrich_data && d.enrich_data.qualityEN) || d.pg_qualityEN
         };
-        for (const [serverKey, localKey] of Object.entries(enrichDirectMap)) {
-          if (d[serverKey] !== undefined) {
-            const arr = getEnrichArray(localKey);
-            arr.length = 0;
-            arr.push(...d[serverKey]);
-          }
-        }
-        // localStorage overrides (user edits take priority)
-        try {
-          const lsEnrichCN = storage.get('enrichCN');
-          if (lsEnrichCN) enrichCN = lsEnrichCN;
-          const lsEnrichEN = storage.get('enrichEN');
-          if (lsEnrichEN) enrichEN = lsEnrichEN;
-          const lsSkinCN = storage.get('skinCN');
-          if (lsSkinCN) skinCN = lsSkinCN;
-          const lsSkinEN = storage.get('skinEN');
-          if (lsSkinEN) skinEN = lsSkinEN;
-          const lsQualCN = storage.get('qualityCN');
-          if (lsQualCN) qualityCN = lsQualCN;
-          const lsQualEN = storage.get('qualityEN');
-          if (lsQualEN) qualityEN = lsQualEN;
-        } catch (e) {
-          console.warn('[loadDataConstants] Failed to load enrich from localStorage:', e.message);
-        }
+        loadEnrichGroups(legacyEnrich);
         saveEnrichData();
       }
     }
@@ -721,7 +825,8 @@ async function loadDataConstants() {
   console.log('ℹ️ Data constants initialized (fallback defaults used if server unavailable)');
 }
 
-const ENRICH_KEYS = new Set(['enrichCN', 'enrichEN', 'skinCN', 'skinEN', 'qualityCN', 'qualityEN']);
+// enrich_groups 现在走通用同步通道；旧 6 个扁平键只用于一次性迁移，这里不再特殊跳过
+const ENRICH_KEYS = new Set();
 
 async function loadAllFromServer() {
   if (!window.location.origin || !window.location.origin.startsWith('http')) return false;
@@ -2140,7 +2245,7 @@ async function _prepareOnePrompt(idx, startTime, completed, total, wf) {
         promptText = picks.map(p => p.en.split('/')[0].trim()).filter(Boolean).join(', ');
       } else {
         ec.forEach(c => { if (c.items.length) picks.push(c.items[Math.floor(Math.random() * c.items.length)]); });
-        promptText = getIdentityPrefix() + '，' + picks.map(p => p.cn).join('，');
+        promptText = [getIdentityPrefix()].concat(picks.map(p => p.cn)).filter(Boolean).join('，');
       }
     }
     if (!promptText) {
@@ -2154,7 +2259,7 @@ async function _prepareOnePrompt(idx, startTime, completed, total, wf) {
       // （原来两个框都写英文，optimizePrompt 按中文模板处理后会变成中英混杂）
       enArea.value = promptText;
       if (picks.length) {
-        cnArea.value = getIdentityPrefix() + '，' + picks.map(p => p.cn).join('，');
+        cnArea.value = [getIdentityPrefix()].concat(picks.map(p => p.cn)).filter(Boolean).join('，');
       }
       // picks 为空（手填英文提示词）时保留中文框原内容，不覆盖
     } else {
@@ -2162,7 +2267,7 @@ async function _prepareOnePrompt(idx, startTime, completed, total, wf) {
       // Reuse the same picks that generated promptText for consistent CN->EN mapping
       if (picks.length) {
         const enParts = picks.map(p => p.en.split('/')[0].trim());
-        enArea.value = getIdentityEn() + ', ' + enParts.join(', ');
+        enArea.value = [getIdentityEn()].concat(enParts).filter(Boolean).join(', ');
       } else {
         enArea.value = promptText;
       }
@@ -2569,7 +2674,7 @@ function openComfySettings() {
 // ============================================================
 
 const BACKUP_GROUPS = {
-  prompts: { keys: ['prompts_data','prompts_data_enabled','identity_regions','identity_genders','identity_age','identity_age_random','identity_region_random','identity_gender_random','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'], name: '提示词与类别' },
+  prompts: { keys: ['prompts_data','prompts_data_enabled','identity_regions','identity_genders','identity_age','identity_age_random','identity_region_random','identity_gender_random','identity_enabled','enrich_groups','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'], name: '提示词与类别' },
   ai: { keys: ['ai_settings','ai_preset','ai_history'], name: 'AI 润色设置' },
   comfy: { keys: ['comfy_settings','comfy_workflows','comfy_gallery'], name: 'ComfyUI 设置' },
   server_config: { keys: ['port','host','comfy_url','html_file'], name: '服务配置', server: true }

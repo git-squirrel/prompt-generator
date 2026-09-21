@@ -206,6 +206,12 @@ h1 { display: none; }
   display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px;
   box-shadow: var(--shadow-sm);
 }
+.identity-master { display: flex; align-items: center; gap: 8px; padding-right: 14px; border-right: 1px solid var(--border); }
+.identity-master .im-label { font-size: 11px; font-weight: 600; color: var(--text2); letter-spacing: .04em; white-space: nowrap; }
+.identity-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; flex: 1 1 auto; min-width: 0; }
+/* 关闭人物身份：三个控件变灰并不可操作 */
+.identity-bar.identity-off .identity-fields { opacity: .45; pointer-events: none; }
+.identity-bar.identity-off .ipreview { color: var(--text3); background: var(--surface2); }
 .identity-bar .ilabel { font-size: 11px; font-weight: 600; color: var(--text2); margin-right: 3px; letter-spacing: .04em; }
 .age-group { display: flex; align-items: center; gap: 9px; }
 .age-group input[type="range"] {
@@ -314,6 +320,58 @@ h1 { display: none; }
   font-size: 10px; font-weight: 700; background: var(--accent); color: #fff;
   border-radius: var(--radius-sm); padding: 2px 7px; margin-left: 6px;
 }
+
+/* === 润色模板组（可自定义增删） === */
+.eg-top { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.eg-note { flex: 1; min-width: 160px; font-size: 10.5px; color: var(--text2); line-height: 1.5; }
+.eg-newinput {
+  flex: 0 0 150px; font-size: 11px; padding: 5px 12px; font-family: inherit;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); color: var(--text); outline: none;
+}
+.eg-newinput:focus { border-color: var(--accent); box-shadow: var(--shadow-glow); }
+.eg-newbtn { font-size: 10.5px; padding: 5px 12px; }
+.eg-group {
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 12px; margin-bottom: 10px; transition: all .2s;
+}
+.eg-group.eg-off { background: var(--surface2); }
+.eg-group.eg-skipped { background: rgba(245, 158, 11, .07); border-color: rgba(245, 158, 11, .4); }
+.eg-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 7px; }
+.eg-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.eg-count { font-size: 10px; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 1px 7px; border-radius: 5px; }
+.eg-sp { margin-left: auto; }
+.eg-badge { font-size: 10px; font-weight: 700; color: var(--orange); }
+.eg-badge-off { color: var(--text3); }
+.eg-chk {
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+  font-size: 10.5px; color: var(--text2); background: var(--surface);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 3px 9px;
+}
+.eg-chk input { accent-color: var(--accent); cursor: pointer; margin: 0; }
+.eg-chk.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.eg-chk.warn { border-color: var(--orange); color: var(--orange); background: rgba(245, 158, 11, .1); font-weight: 600; }
+.eg-rmgroup {
+  font-size: 10px; padding: 3px 9px; border-radius: var(--radius-sm); cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--text2); font-family: inherit;
+}
+.eg-rmgroup:hover { border-color: var(--red); color: var(--red); }
+.eg-list { display: flex; flex-direction: column; gap: 3px; margin-bottom: 7px; max-height: 168px; overflow-y: auto; }
+.eg-item { display: flex; align-items: flex-start; gap: 6px; }
+.eg-tag {
+  flex-shrink: 0; font-size: 9px; font-weight: 700; color: var(--text2);
+  background: var(--surface2); border-radius: 4px; padding: 2px 5px; margin-top: 1px;
+}
+.eg-text { flex: 1; font-size: 10.5px; color: var(--text); line-height: 1.45; word-break: break-all; }
+.eg-del { flex-shrink: 0; background: none; border: none; color: var(--red); cursor: pointer; font-size: 10px; padding: 0 4px; }
+.eg-empty { font-size: 10px; color: var(--text3); padding: 2px 0; }
+.eg-addrow { display: flex; gap: 5px; }
+.eg-add {
+  flex: 1; min-width: 0; font-size: 11px; padding: 5px 11px; font-family: inherit;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); color: var(--text); outline: none;
+}
+.eg-add:focus { border-color: var(--accent); box-shadow: var(--shadow-glow); }
 
 /* === Modal (pm-*) === */
 .pm-overlay {
