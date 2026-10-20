@@ -10,10 +10,12 @@ import webbrowser
 import os
 import sys
 import json
+import shutil
 import threading
 import time
 import urllib.request
 import urllib.error
+import urllib.parse
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(SCRIPT_DIR, 'data', 'server_config.json')
@@ -34,7 +36,8 @@ def load_config():
                 for k, v in DEFAULT_CONFIG.items():
                     config.setdefault(k, v)
                 return config
-        except:
+        except Exception as e:
+            print(f'  [warn] 读取配置失败，使用默认配置: {e}')
             return dict(DEFAULT_CONFIG)
     return dict(DEFAULT_CONFIG)
 
@@ -82,8 +85,18 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
     html_file = ""
     data_dir = None
 
+    # 禁止通过 HTTP 直接访问的敏感路径（含密钥/配置）
+    BLOCKED_PATHS = ('/data/', '/__pycache__/', '/api key.txt', '/backup-')
+
     def log_message(self, format, *args):
-        print(f'  [{self.address_string()}] {args[0]} {args[1]}')
+        try:
+            print(f'  [{self.address_string()}] {args[0]} {args[1] if len(args) > 1 else ""}')
+        except Exception:
+            pass
+
+    def _is_blocked_path(self):
+        p = urllib.parse.unquote(self.path.split('?')[0]).lower()
+        return any(p.startswith(b) or p == b.rstrip('/') for b in self.BLOCKED_PATHS)
 
     def do_PROXY(self, method):
         """Handle proxied requests to /comfy-proxy/*"""
@@ -93,18 +106,13 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(b'Proxy disabled')
             return
 
-        # Strip /comfy-proxy prefix
+        # Strip /comfy-proxy prefix（注意：path 中已包含查询字符串，无需再拼接）
         path = self.path[len('/comfy-proxy'):]
         if not path.startswith('/'):
             path = '/' + path
 
         target_url = self.comfy_url.rstrip('/') + path
         print(f'  [proxy] {method} {path} -> {target_url}')
-
-        # Forward query string
-        if self.path.find('?') > 0 and path.find('?') < 0:
-            qs = self.path[self.path.find('?'):]
-            target_url += qs
 
         try:
             data = None
@@ -122,15 +130,19 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
                 }
             )
 
-            with urllib.request.urlopen(req, timeout=60) as response:
+            with urllib.request.urlopen(req, timeout=120) as response:
                 self.send_response(response.status)
                 # Forward CORS headers
                 self.send_header('Access-Control-Allow-Origin', '*')
                 self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
                 self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
                 self.send_header('Content-Type', response.headers.get('Content-Type', 'application/json'))
+                cl = response.headers.get('Content-Length')
+                if cl:
+                    self.send_header('Content-Length', cl)
                 self.end_headers()
-                self.wfile.write(response.read())
+                # 流式转发，避免大图片一次性读入内存
+                shutil.copyfileobj(response, self.wfile)
 
         except urllib.error.HTTPError as e:
             self.send_response(e.code)
@@ -156,6 +168,12 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith('/comfy-proxy/'):
             self.do_PROXY('GET')
+            return
+        if self._is_blocked_path():
+            self.send_response(403)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"error":"Forbidden"}')
             return
         if self.path == '/api/load-prompts':
             self._handle_load_file('prompts.json')
@@ -210,8 +228,8 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
                 with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                     self.wfile.write(f.read().encode('utf-8'))
                 return
-            except:
-                pass
+            except Exception as e:
+                print(f'  [warn] 读取 server_config.json 失败: {e}')
         self.wfile.write(b'{}')
 
     def _handle_save_config(self):
@@ -249,6 +267,15 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
 
     def _handle_shutdown(self):
         """Handle shutdown request: read seconds from body, trigger Windows shutdown"""
+        # 安全：仅允许本机请求触发关机（防止 host 设为 0.0.0.0 时被局域网误触）
+        client_ip = self.client_address[0] if self.client_address else ''
+        if client_ip not in ('127.0.0.1', '::1', 'localhost'):
+            self.send_response(403)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "仅本机可触发关机"}).encode())
+            return
         try:
             content_len = int(self.headers.get('Content-Length', 0))
             body = json.loads(self.rfile.read(content_len)) if content_len > 0 else {}
@@ -308,8 +335,8 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
                             content['cn_en_map'] = cmap
                 self.wfile.write(json.dumps(content, ensure_ascii=False).encode('utf-8'))
                 return
-            except:
-                pass
+            except Exception as e:
+                print(f'  [warn] 读取 {filename} 失败: {e}')
         self.wfile.write(b'{}')
 
 
@@ -390,6 +417,12 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
 
+class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    """多线程 HTTP 服务器：避免代理转发/轮询时阻塞页面其他请求"""
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 def main():
     config = load_config()
     
@@ -445,7 +478,7 @@ def main():
     ComfyProxyHandler.data_dir = os.path.join(SCRIPT_DIR, 'data')
     
     try:
-        server = socketserver.TCPServer((host, port), ComfyProxyHandler)
+        server = ThreadingHTTPServer((host, port), ComfyProxyHandler)
     except OSError as e:
         if '10048' in str(e) or 'Address already in use' in str(e):
             print(f'⚠️  端口 {port} 已被占用')
@@ -458,7 +491,7 @@ def main():
                         port = int(inp)
                     config['port'] = port
                     save_config(config)
-                    server = socketserver.TCPServer((host, port), ComfyProxyHandler)
+                    server = ThreadingHTTPServer((host, port), ComfyProxyHandler)
                     break
                 except ValueError:
                     print('   请输入有效的数字端口')

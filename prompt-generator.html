@@ -7,7 +7,9 @@
 <link rel="stylesheet" href="css/style.css">
 <script>
 // Pre-paint theme to avoid flash
-(function(){try{var t=localStorage.getItem('pg_v2_theme');if(t){t=JSON.parse(t);}document.documentElement.setAttribute('data-theme', t==='dark'?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}})();
+// 注意：storage.setRaw 存的是裸字符串 "dark"/"light"，JSON.parse 会抛错，
+// 解析失败时直接用原值，否则深色模式刷新页面会闪回浅色。
+(function(){try{var t=localStorage.getItem('pg_v2_theme');if(t){try{t=JSON.parse(t);}catch(_){/* 裸字符串直接用 */}}document.documentElement.setAttribute('data-theme', t==='dark'?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}})();
 </script>
 </head>
 <body>

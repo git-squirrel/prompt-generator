@@ -87,6 +87,150 @@ function showToast(msg, type) {
 }
 
 // ============================================================
+// SECTION 2.5: UI Dialogs —— 自定义模态框，替代原生 confirm()/prompt()
+// ============================================================
+
+// 构建对话框骨架；onClose(result) 负责 resolve 并移除遮罩
+function _uidOverlay(title, onClose) {
+  const ov = document.createElement('div');
+  ov.className = 'pm-overlay';
+  ov.style.zIndex = '1100'; // 需盖在其他 pm-overlay 模态框之上
+  const pn = document.createElement('div');
+  pn.className = 'pm-panel uid-panel';
+  const hd = document.createElement('div');
+  hd.className = 'pm-header';
+  const h3 = document.createElement('h3');
+  h3.textContent = title || '确认';
+  hd.appendChild(h3);
+  pn.appendChild(hd);
+  const bd = document.createElement('div');
+  bd.className = 'pm-body';
+  bd.style.padding = '14px 20px 4px';
+  pn.appendChild(bd);
+  ov.appendChild(pn);
+  let closed = false;
+  const close = (result) => {
+    if (closed) return;
+    closed = true;
+    document.removeEventListener('keydown', onKey, true);
+    ov.remove();
+    onClose(result);
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); close(null); }
+  };
+  document.addEventListener('keydown', onKey, true);
+  ov.addEventListener('mousedown', (e) => { if (e.target === ov) close(null); });
+  document.body.appendChild(ov);
+  return { ov, pn, bd, close };
+}
+
+// 确认框（替代 confirm）。opts: { title, okText, cancelText, danger, alert }
+// alert=true 时为纯提示框：只有确定按钮
+function uiConfirm(message, opts) {
+  opts = opts || {};
+  return new Promise((resolve) => {
+    const { bd, close } = _uidOverlay(opts.title || (opts.alert ? '提示' : '确认操作'), (r) => resolve(opts.alert ? undefined : !!r));
+    const msg = document.createElement('div');
+    msg.className = 'uid-msg';
+    msg.textContent = message;
+    bd.appendChild(msg);
+    const ft = document.createElement('div');
+    ft.className = 'uid-footer';
+    if (!opts.alert) {
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = opts.cancelText || '取消';
+      cancelBtn.onclick = () => close(false);
+      ft.appendChild(cancelBtn);
+    }
+    const okBtn = document.createElement('button');
+    okBtn.textContent = opts.okText || (opts.alert ? '知道了' : '确定');
+    okBtn.className = opts.danger ? 'uid-btn-danger' : 'uid-btn-ok';
+    okBtn.onclick = () => close(true);
+    ft.appendChild(okBtn);
+    bd.appendChild(ft);
+    okBtn.focus();
+  });
+}
+
+// 纯提示框（替代 alert）
+function uiAlert(message, opts) {
+  opts = Object.assign({}, opts, { alert: true });
+  return uiConfirm(message, opts);
+}
+
+// 单选列表（替代 prompt 输入编号）。options: [{ label, sub }]
+// 返回选中下标；取消返回 null
+function uiChoice(title, options) {
+  return new Promise((resolve) => {
+    const { bd, close } = _uidOverlay(title, (r) => resolve(r === undefined ? null : r));
+    const list = document.createElement('div');
+    list.className = 'uid-choice-list';
+    options.forEach((opt, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'uid-choice-item';
+      const lb = document.createElement('span');
+      lb.textContent = opt.label;
+      btn.appendChild(lb);
+      if (opt.sub) {
+        const sub = document.createElement('span');
+        sub.className = 'uid-choice-sub';
+        sub.textContent = opt.sub;
+        btn.appendChild(sub);
+      }
+      btn.onclick = () => close(i);
+      list.appendChild(btn);
+    });
+    bd.appendChild(list);
+    const ft = document.createElement('div');
+    ft.className = 'uid-footer';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => close(null);
+    ft.appendChild(cancelBtn);
+    bd.appendChild(ft);
+  });
+}
+
+// 多选列表（替代 prompt 逗号编号）。options: [{ label }]
+// 返回选中下标数组；取消返回 null
+function uiMultiChoice(title, options) {
+  return new Promise((resolve) => {
+    const { bd, close } = _uidOverlay(title, (r) => resolve(r));
+    const list = document.createElement('div');
+    list.className = 'uid-check-list';
+    const cbs = options.map((opt) => {
+      const lb = document.createElement('label');
+      lb.className = 'uid-check-item';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true; // 默认全选，等同原「直接回车导入全部」
+      lb.appendChild(cb);
+      lb.appendChild(document.createTextNode(opt.label));
+      list.appendChild(lb);
+      return cb;
+    });
+    bd.appendChild(list);
+    const ft = document.createElement('div');
+    ft.className = 'uid-footer';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => close(null);
+    const okBtn = document.createElement('button');
+    okBtn.className = 'uid-btn-ok';
+    okBtn.textContent = '导入选中项';
+    okBtn.onclick = () => {
+      const idxs = cbs.map((cb, i) => cb.checked ? i : -1).filter(i => i >= 0);
+      close(idxs);
+    };
+    ft.appendChild(cancelBtn);
+    ft.appendChild(okBtn);
+    bd.appendChild(ft);
+    okBtn.focus();
+  });
+}
+
+// ============================================================
 // SECTION 3: Identity Helpers (deduplicated)
 // ============================================================
 
@@ -263,12 +407,12 @@ function renderIdentityManagement() {
 
   if (regionList) {
     regionList.innerHTML = identityRegions.map((r, i) =>
-      `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:11px;">${r}<button onclick="deleteRegion(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:0;line-height:1;">✕</button></span>`
+      `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:11px;">${escapeHtml(r)}<button onclick="deleteRegion(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:0;line-height:1;">✕</button></span>`
     ).join('');
   }
   if (genderList) {
     genderList.innerHTML = identityGenders.map((g, i) =>
-      `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:11px;">${g}<button onclick="deleteGender(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:0;line-height:1;">✕</button></span>`
+      `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:11px;">${escapeHtml(g)}<button onclick="deleteGender(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:0;line-height:1;">✕</button></span>`
     ).join('');
   }
   if (ageMinInput) ageMinInput.value = identityAge.min || 18;
@@ -288,10 +432,10 @@ function addRegion() {
   showToast(`✅ 已添加地区「${name}」`, 'success');
 }
 
-function deleteRegion(idx) {
+async function deleteRegion(idx) {
   if (idx < 0 || idx >= identityRegions.length) return;
   const name = identityRegions[idx];
-  if (!confirm(`确定删除地区「${name}」？`)) return;
+  if (!await uiConfirm(`确定删除地区「${name}」？`, { danger: true, okText: '删除' })) return;
   identityRegions.splice(idx, 1);
   saveIdentitySettings();
   renderIdentityBar();
@@ -312,10 +456,10 @@ function addGender() {
   showToast(`✅ 已添加性别「${name}」`, 'success');
 }
 
-function deleteGender(idx) {
+async function deleteGender(idx) {
   if (idx < 0 || idx >= identityGenders.length) return;
   const name = identityGenders[idx];
-  if (!confirm(`确定删除性别「${name}」？`)) return;
+  if (!await uiConfirm(`确定删除性别「${name}」？`, { danger: true, okText: '删除' })) return;
   identityGenders.splice(idx, 1);
   saveIdentitySettings();
   renderIdentityBar();
@@ -478,11 +622,11 @@ function addEnrichGroup() {
   showToast(`✅ 已新建模板组「${name}」`, 'success');
 }
 
-function deleteEnrichGroup(id) {
+async function deleteEnrichGroup(id) {
   const g = findEnrichGroup(id);
   if (!g) return;
   const n = (Array.isArray(g.cn) ? g.cn.length : 0) + (Array.isArray(g.en) ? g.en.length : 0);
-  if (!confirm(`删除模板组「${g.name}」及其中的 ${n} 条模板？`)) return;
+  if (!await uiConfirm(`删除模板组「${g.name}」及其中的 ${n} 条模板？`, { danger: true, okText: '删除' })) return;
   enrichGroups = enrichGroups.filter(x => x.id !== id);
   saveEnrichData();
   renderEnrichManagement();
@@ -533,12 +677,12 @@ function addEnrichBoth(groupId) {
   showToast('✅ 已添加模板', 'success');
 }
 
-function deleteEnrichItem(groupId, lang, idx) {
+async function deleteEnrichItem(groupId, lang, idx) {
   const g = findEnrichGroup(groupId);
   if (!g || !Array.isArray(g[lang])) return;
   if (idx < 0 || idx >= g[lang].length) return;
   const item = g[lang][idx];
-  if (!confirm(`确定删除此模板？\n「${String(item).slice(0, 60)}」`)) return;
+  if (!await uiConfirm(`确定删除此模板？\n「${String(item).slice(0, 60)}」`, { danger: true, okText: '删除' })) return;
   g[lang].splice(idx, 1);
   saveEnrichData();
   renderEnrichManagement();
@@ -604,11 +748,11 @@ function optimizePrompt() {
   const egHasCN = egActive.some(g => Array.isArray(g.cn) && g.cn.length);
   const egHasEN = egActive.some(g => Array.isArray(g.en) && g.en.length);
   if (!egHasCN) {
-    alert('⚠️ 没有可用的中文润色模板。请到「管理类别与提示词」→ 润色模板检查：各组是否已启用、组内是否有内容、是否被「人物身份」总开关跳过');
+    uiAlert('没有可用的中文润色模板。\n请到「管理类别与提示词」→ 润色模板检查：各组是否已启用、组内是否有内容、是否被「人物身份」总开关跳过');
     return;
   }
   if (!egHasEN) {
-    alert('⚠️ 没有可用的英文润色模板。请到「管理类别与提示词」→ 润色模板检查：各组是否已启用、组内是否有内容、是否被「人物身份」总开关跳过');
+    uiAlert('没有可用的英文润色模板。\n请到「管理类别与提示词」→ 润色模板检查：各组是否已启用、组内是否有内容、是否被「人物身份」总开关跳过');
     return;
   }
 
@@ -704,22 +848,22 @@ function showAllItems(idx) {
   if (existing) existing.remove();
   const overlay = document.createElement('div');
   overlay.id = 'itemModal';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:1000;background:rgba(13,13,13,.4);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;';
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
   const panel = document.createElement('div');
-  panel.style.cssText = 'background:#1a1a24;border:1px solid #333;border-radius:12px;max-width:600px;width:100%;max-height:75vh;overflow-y:auto;padding:18px;';
+  panel.style.cssText = 'background:var(--surface-solid);border:1px solid var(--border);border-radius:var(--radius-card);max-width:600px;width:100%;max-height:75vh;overflow-y:auto;padding:18px;box-shadow:0 24px 64px -16px rgba(16,24,40,.25);';
   const title = document.createElement('h3');
-  title.style.cssText = 'margin-bottom:10px;font-size:15px;';
+  title.style.cssText = 'margin-bottom:10px;font-size:15px;color:var(--text);';
   title.textContent = `${cat.name} (${cat.items.length} 条)`;
   panel.appendChild(title);
   const closeBtn = document.createElement('button');
   closeBtn.textContent = '✕ 关闭';
-  closeBtn.style.cssText = 'float:right;background:#24242f;border:1px solid #333;color:#888;padding:3px 10px;border-radius:5px;cursor:pointer;font-size:11px;';
+  closeBtn.style.cssText = 'float:right;background:var(--surface2);border:1px solid var(--border);color:var(--text2);padding:3px 10px;border-radius:5px;cursor:pointer;font-size:11px;font-family:inherit;';
   closeBtn.onclick = () => overlay.remove();
   panel.appendChild(closeBtn);
   const searchInput = document.createElement('input');
   searchInput.placeholder = '搜索...';
-  searchInput.style.cssText = 'width:100%;padding:6px 10px;margin-bottom:10px;background:#24242f;border:1px solid #333;border-radius:5px;color:#e0e0ec;font-size:12px;outline:none;';
+  searchInput.style.cssText = 'width:100%;padding:6px 10px;margin-bottom:10px;background:var(--surface);border:1px solid var(--border-strong);border-radius:5px;color:var(--text);font-size:12px;outline:none;font-family:inherit;';
   panel.appendChild(searchInput);
   const list = document.createElement('div');
   list.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px;';
@@ -729,16 +873,16 @@ function showAllItems(idx) {
     (filter ? cat.items.filter(i => i.cn.includes(filter) || i.en.toLowerCase().includes(filter.toLowerCase())) : cat.items).forEach(item => {
       const chip = document.createElement('span');
       chip.textContent = item.cn;
-      chip.style.cssText = 'font-size:11px;background:#24242f;color:#888;padding:3px 8px;border-radius:3px;cursor:pointer;';
-      chip.onmouseenter = () => { chip.style.background = '#7c5cfc'; chip.style.color = '#fff'; };
-      chip.onmouseleave = () => { chip.style.background = '#24242f'; chip.style.color = '#888'; };
+      chip.style.cssText = 'font-size:11px;background:var(--surface2);color:var(--text2);padding:3px 8px;border-radius:3px;cursor:pointer;transition:background .15s,color .15s;';
+      chip.onmouseenter = () => { chip.style.background = 'var(--accent)'; chip.style.color = '#fff'; };
+      chip.onmouseleave = () => { chip.style.background = 'var(--surface2)'; chip.style.color = 'var(--text2)'; };
       chip.onclick = () => { addToPrompt(item.cn); overlay.remove(); };
       list.appendChild(chip);
     });
     if (!list.children.length) {
       const e = document.createElement('div');
       e.textContent = '无匹配结果';
-      e.style.cssText = 'color:#888;font-size:12px;padding:16px;text-align:center;width:100%;';
+      e.style.cssText = 'color:var(--text2);font-size:12px;padding:16px;text-align:center;width:100%;';
       list.appendChild(e);
     }
   }
@@ -766,7 +910,16 @@ function saveData() {
   syncAllToServer();
 }
 
+// 防抖：prompts.json 有几百 KB，原来每次小操作（开关类别、改年龄）都全量 POST 三次。
+// 合并 600ms 内的连续修改，一次发出。
+let _syncTimer = null;
 function syncAllToServer() {
+  if (!window.location.origin || !window.location.origin.startsWith('http')) return;
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(_doSyncAllToServer, 600);
+}
+
+function _doSyncAllToServer() {
   if (!window.location.origin || !window.location.origin.startsWith('http')) return;
   ['prompts', 'ai', 'comfy'].forEach(cat => {
     const data = {};
@@ -874,9 +1027,14 @@ function renderCategories() {
     if (isMgmt) {
       headerHtml += `<button class="btn-del" onclick="deleteCategory(${idx})" title="删除此类别">✕</button>`;
     } else {
-      headerHtml += `<label class="toggle"><input type="checkbox" ${checked} onchange="toggleCat('${cat.name.replace(/'/g, "\\'")}', this.checked, ${idx})"><span class="slider"></span></label>`;
+      // 类别名由用户输入，不再拼接进 onchange 字符串（避免引号注入），改为 appendChild 后绑定事件
+      headerHtml += `<label class="toggle"><input type="checkbox" ${checked}><span class="slider"></span></label>`;
     }
     header.innerHTML = headerHtml;
+    if (!isMgmt) {
+      const cb = header.querySelector('input[type="checkbox"]');
+      if (cb) cb.addEventListener('change', () => toggleCat(cat.name, cb.checked, idx));
+    }
     card.appendChild(header);
     const preview = document.createElement('div');
     preview.className = 'cat-preview';
@@ -959,10 +1117,10 @@ function batchAddCategories() {
   showToast(`✅ 已批量添加 ${added} 个类别`, 'success');
 }
 
-function deleteCategory(idx) {
+async function deleteCategory(idx) {
   const cat = DATA[idx];
   if (!cat) return;
-  if (!confirm(`确定要删除类别「${cat.name}」及其所有 ${cat.items.length} 条提示词？`)) return;
+  if (!await uiConfirm(`确定要删除类别「${cat.name}」及其所有 ${cat.items.length} 条提示词？`, { danger: true, okText: '删除' })) return;
   DATA.splice(idx, 1);
   delete promptsEnabled[cat.name];
   saveData();
@@ -1602,8 +1760,8 @@ function openAiHistory() {
     const clr = document.createElement('button');
     clr.textContent = '🗑️ 清空历史';
     clr.style.cssText = 'padding:5px 14px;border-radius:5px;cursor:pointer;border:1px solid var(--red);background:transparent;color:var(--red);font-size:11px;font-family:inherit;';
-    clr.onclick = () => {
-      if (confirm('确定清空所有润色记录？')) {
+    clr.onclick = async () => {
+      if (await uiConfirm('确定清空所有润色记录？', { danger: true, okText: '清空' })) {
         aiHistory = [];
         saveAiHistory();
         ov.remove();
@@ -1651,6 +1809,10 @@ async function aiPolish() {
     } else {
       userContent = '请优化以下提示词，保留中英文对照：\n\n中文：' + cn;
       if (en) userContent += '\n\nEnglish: ' + en;
+      // 必须声明输出格式，否则下方按「## 中文翻译 / ## 优化后英文提示词」解析几乎必然失败，
+      // 失败时整段回复（含中英混杂）会被直接塞进中文框。
+      userContent += '\n\n请严格按以下格式输出，不要添加任何其他内容：\n' +
+        '## 中文翻译\n<润色后的中文提示词>\n\n## 优化后英文提示词\n<polished English prompt>';
     }
     msgs.push({ role: 'user', content: userContent });
 
@@ -1840,8 +2002,8 @@ function handleWorkflowUpload(e) {
   e.target.value = '';
 }
 
-function deleteComfyWorkflow(idx) {
-  if (!confirm('删除工作流「' + comfyWorkflows[idx].name + '」？')) return;
+async function deleteComfyWorkflow(idx) {
+  if (!await uiConfirm('删除工作流「' + comfyWorkflows[idx].name + '」？', { danger: true, okText: '删除' })) return;
   comfyWorkflows.splice(idx, 1);
   if (comfySettings.selectedWorkflow === idx) comfySettings.selectedWorkflow = -1;
   else if (comfySettings.selectedWorkflow > idx) comfySettings.selectedWorkflow--;
@@ -1997,10 +2159,25 @@ function _galleryColsForWidth() {
   return w <= 620 ? 2 : (w <= 900 ? 3 : GALLERY_COLS);
 }
 
+// 图片加载失败（ComfyUI 重启/输出被清理后旧链接失效）→ 替换为占位图，避免裂图
+const GALLERY_BROKEN_PLACEHOLDER =
+  'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">' +
+    '<rect width="100%" height="100%" fill="#3a3a3a"/>' +
+    '<text x="50%" y="50%" fill="#888" font-size="14" text-anchor="middle" dominant-baseline="middle">图片已失效</text>' +
+    '</svg>');
+
+function galleryImgError(img) {
+  if (!img) return;
+  img.onerror = null;
+  img.src = GALLERY_BROKEN_PLACEHOLDER;
+  img.style.objectFit = 'cover';
+}
+
 function _galleryItemHTML(item, idx) {
   const hasBadge = item.badge !== undefined && item.badge !== null && String(item.badge) !== '';
   return `<div class="gallery-item" onclick="openGalleryModal(${idx})">
-    <img src="${item.url}" alt="gallery" loading="lazy" onload="galleryImgLoaded(this)">
+    <img src="${item.url}" alt="gallery" loading="lazy" onload="galleryImgLoaded(this)" onerror="galleryImgError(this)">
     <div class="gallery-bar" onclick="event.stopPropagation()">
       ${hasBadge ? `<span class="gallery-idx">#${escapeHtml(String(item.badge))}</span>` : ''}
       <button class="gallery-btn" onclick="downloadGalleryImg(${idx})" title="下载原图">
@@ -2062,8 +2239,8 @@ function addToComfyGallery(imgUrl, badge, prompt, seed) {
   renderComfyGallery();
 }
 
-function clearComfyGallery() {
-  if (!confirm('确定清空所有图片？')) return;
+async function clearComfyGallery() {
+  if (!await uiConfirm('确定清空所有图片？', { danger: true, okText: '清空' })) return;
   comfyGallery = [];
   saveComfyGallery();
   renderComfyGallery();
@@ -2112,9 +2289,9 @@ function deleteCurrentModalImg() {
   closeImgModal();
 }
 
-function deleteGalleryItem(idx) {
+async function deleteGalleryItem(idx) {
   if (idx < 0 || idx >= comfyGallery.length) return;
-  if (!confirm('确定删除这张图片？')) return;
+  if (!await uiConfirm('确定删除这张图片？', { danger: true, okText: '删除' })) return;
   comfyGallery.splice(idx, 1);
   saveComfyGallery();
   renderComfyGallery();
@@ -2182,14 +2359,23 @@ function _getWorkflowSteps(wf) {
   return 20;
 }
 
+// ComfyUI API 前缀自适应：标准路由是 /history、/view（无 /api 前缀），
+// 个别整合包/反代可能挂在 /api 下。默认无前缀，遇到 404 自动切换并记住。
+let _comfyApiPrefix = '';
+
 async function _pollComfyUI(pid, steps) {
-  const url = getComfyBaseUrl() + '/api/history/' + pid;
   const startTime = Date.now();
   for (let i = 1; i <= 300; i++) {
     await new Promise(r => setTimeout(r, 1000));
     const elapsed = (Date.now() - startTime) / 1000;
+    const url = getComfyBaseUrl() + _comfyApiPrefix + '/history/' + pid;
     try {
       const r = await fetch(url);
+      // 前缀探测：标准路径 404 时，切到 /api 前缀重试（仅前几次尝试时切换）
+      if (r.status === 404 && _comfyApiPrefix === '' && i <= 3) {
+        _comfyApiPrefix = '/api';
+        continue;
+      }
       if (r.ok) {
         const d = await r.json();
         if (d[pid]) {
@@ -2218,7 +2404,7 @@ function _extractImages(historyData) {
     if (node.images && Array.isArray(node.images)) {
       for (const img of node.images) {
         if (img.filename) {
-          images.push(baseUrl + '/api/view?filename=' + encodeURIComponent(img.filename) +
+          images.push(baseUrl + _comfyApiPrefix + '/view?filename=' + encodeURIComponent(img.filename) +
             '&subfolder=' + encodeURIComponent(img.subfolder || '') +
             '&type=' + encodeURIComponent(img.type || 'output'));
         }
@@ -2411,6 +2597,16 @@ async function startComfyGeneration() {
 function stopComfyGeneration() {
   comfyStopped = true;
   showToast('⏹ 正在中止生图...', 'success');
+  // 同时通知 ComfyUI 中断当前任务并清空队列，否则后台仍会继续跑完已提交的任务
+  try {
+    const base = getComfyBaseUrl();
+    fetch(base + '/interrupt', { method: 'POST' }).catch(() => {});
+    fetch(base + '/queue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clear: true })
+    }).catch(() => {});
+  } catch (e) { /* 忽略，前端状态已置为中止 */ }
 }
 
 // ============================================================
@@ -2717,24 +2913,19 @@ async function _exportServerConfig() {
   }
 }
 
-function exportAllData() {
-  const sel = prompt(
-    '选择要导出的文件（输入编号）：\n\n' +
-    '1. 提示词数据（prompts）\n' +
-    '2. AI 润色设置（ai_settings）\n' +
-    '3. ComfyUI 设置（comfy_settings）\n' +
-    '4. 服务配置（server_config）\n\n' +
-    '输入 1-4，直接取消则不导出',
-    '1'
-  );
-  if (sel === null) return;
-  const idx = parseInt(sel.trim());
-  if (idx === 1) _exportGroup('prompts', BACKUP_GROUPS.prompts);
-  else if (idx === 2) _exportGroup('ai', BACKUP_GROUPS.ai);
-  else if (idx === 3) _exportGroup('comfy', BACKUP_GROUPS.comfy);
-  else if (idx === 4) _exportServerConfig();
-  else { showToast('⚠️ 请输入 1-4', 'error'); return; }
-  const names = ['', '提示词数据', 'AI 润色设置', 'ComfyUI 设置', '服务配置'];
+async function exportAllData() {
+  const idx = await uiChoice('选择要导出的数据', [
+    { label: '📝 提示词数据', sub: 'prompts' },
+    { label: '🤖 AI 润色设置', sub: 'ai_settings' },
+    { label: '🖼️ ComfyUI 设置', sub: 'comfy_settings' },
+    { label: '⚙️ 服务配置', sub: 'server_config' }
+  ]);
+  if (idx === null) return;
+  const names = ['提示词数据', 'AI 润色设置', 'ComfyUI 设置', '服务配置'];
+  if (idx === 0) _exportGroup('prompts', BACKUP_GROUPS.prompts);
+  else if (idx === 1) _exportGroup('ai', BACKUP_GROUPS.ai);
+  else if (idx === 2) _exportGroup('comfy', BACKUP_GROUPS.comfy);
+  else if (idx === 3) _exportServerConfig();
   showToast(`✅ 已导出：${names[idx]}`, 'success');
 }
 
@@ -2743,7 +2934,7 @@ function importAllData(event) {
   if (!file) return;
   const fname = file.name.toLowerCase();
   const reader = new FileReader();
-  reader.onload = function (e) {
+  reader.onload = async function (e) {
     try {
       const data = JSON.parse(e.target.result);
       if (!data || typeof data !== 'object') throw new Error('无效格式');
@@ -2757,14 +2948,9 @@ function importAllData(event) {
       else if (fname.includes('comfy')) idxs = [cats.indexOf('comfy')];
       else if (fname.includes('server_config') || fname.includes('config')) idxs = [cats.indexOf('server_config')];
       if (idxs.length !== 1 || idxs[0] === -1) {
-        const sel = prompt(
-          '选择要导入的类别（输入编号，逗号分隔）：\n\n' +
-          cats.map((c, i) => `${i + 1}. ${BACKUP_GROUPS[c].name}`).join('\n') +
-          '\n\n全部导入请直接回车',
-          '1,2,3'
-        );
-        if (sel === null) { event.target.value = ''; return; }
-        idxs = sel.trim() ? sel.split(',').map(s => parseInt(s.trim()) - 1).filter(i => i >= 0 && i < cats.length) : cats.map((_, i) => i);
+        idxs = await uiMultiChoice('选择要导入的类别', cats.map(c => ({ label: BACKUP_GROUPS[c].name })));
+        if (idxs === null) { event.target.value = ''; return; }
+        if (!idxs.length) { showToast('⚠️ 未选择任何类别', 'error'); event.target.value = ''; return; }
       }
       let count = 0;
       idxs.forEach(i => {
@@ -2862,8 +3048,13 @@ async function init() {
 }
 
 // Keyboard shortcut
+// 焦点在输入框/文本域时不触发，避免误把正在手动编辑的提示词覆盖掉
 document.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') randomPrompt();
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT')) return;
+    randomPrompt();
+  }
 });
 
 // Start
