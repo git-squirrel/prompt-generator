@@ -301,42 +301,49 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": str(e)}).encode())
 
     def _handle_load_file(self, filename):
+        data_file = os.path.join(self.data_dir, filename) if self.data_dir else None
+        # 文件不存在 → 404。前端据此清空对应类别的本地缓存（文件即真相），
+        # 避免「文件已删/改名，但浏览器 localStorage 里的旧数据仍然复活」
+        if not data_file or not os.path.exists(data_file):
+            self.send_response(404)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": f"{filename} not found"}).encode())
+            return
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
-        data_file = os.path.join(self.data_dir, filename) if self.data_dir else None
-        # Regular file handling
-        if data_file and os.path.exists(data_file):
-            try:
-                with open(data_file, 'r', encoding='utf-8') as f:
-                    content = json.load(f)
-                # Ensure prompts.json is always wrapped with pg_prompts_data key
-                if filename == 'prompts.json':
-                    if isinstance(content, dict) and 'data' in content:
-                        # New format: {"data":[...], "identity_en":{...}, "cn_en_map":{...}, "enrich_data":{...}}
-                        result = {'pg_prompts_data': content['data']}
-                        if 'identity_en' in content: result['identity_en'] = content['identity_en']
-                        if 'cn_en_map' in content: result['cn_en_map'] = content['cn_en_map']
-                        if 'enrich_data' in content: result['enrich_data'] = content['enrich_data']
-                        content = result
-                    elif not isinstance(content, dict):
-                        content = {'pg_prompts_data': content}
-                # Merge cn_en_map and identity_en into prompts.json response (from user data or fallback)
-                if filename == 'prompts.json' and isinstance(content, dict):
-                    # Build cn_en_map from pg_prompts_data if not present
-                    if 'cn_en_map' not in content and 'pg_prompts_data' in content:
-                        cmap = {}
-                        for cat in content['pg_prompts_data']:
-                            for item in cat.get('items', []):
-                                if 'cn' in item and 'en' in item:
-                                    cmap[item['cn']] = item['en']
-                        if cmap:
-                            content['cn_en_map'] = cmap
-                self.wfile.write(json.dumps(content, ensure_ascii=False).encode('utf-8'))
-                return
-            except Exception as e:
-                print(f'  [warn] 读取 {filename} 失败: {e}')
+        try:
+            with open(data_file, 'r', encoding='utf-8') as f:
+                content = json.load(f)
+            # Ensure prompts.json is always wrapped with pg_prompts_data key
+            if filename == 'prompts.json':
+                if isinstance(content, dict) and 'data' in content:
+                    # New format: {"data":[...], "identity_en":{...}, "cn_en_map":{...}, "enrich_data":{...}}
+                    result = {'pg_prompts_data': content['data']}
+                    if 'identity_en' in content: result['identity_en'] = content['identity_en']
+                    if 'cn_en_map' in content: result['cn_en_map'] = content['cn_en_map']
+                    if 'enrich_data' in content: result['enrich_data'] = content['enrich_data']
+                    content = result
+                elif not isinstance(content, dict):
+                    content = {'pg_prompts_data': content}
+            # Merge cn_en_map and identity_en into prompts.json response (from user data or fallback)
+            if filename == 'prompts.json' and isinstance(content, dict):
+                # Build cn_en_map from pg_prompts_data if not present
+                if 'cn_en_map' not in content and 'pg_prompts_data' in content:
+                    cmap = {}
+                    for cat in content['pg_prompts_data']:
+                        for item in cat.get('items', []):
+                            if 'cn' in item and 'en' in item:
+                                cmap[item['cn']] = item['en']
+                    if cmap:
+                        content['cn_en_map'] = cmap
+            self.wfile.write(json.dumps(content, ensure_ascii=False).encode('utf-8'))
+            return
+        except Exception as e:
+            print(f'  [warn] 读取 {filename} 失败: {e}')
         self.wfile.write(b'{}')
 
 

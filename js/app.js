@@ -949,6 +949,13 @@ async function loadDataConstants() {
   }
   try {
     const r = await fetch('/api/load-prompts', { signal: AbortSignal.timeout(3000) });
+    if (r.status === 404) {
+      // 文件不存在：本地缓存已在 loadAllFromServer 清空。这里只加载默认模板组，
+      // 不调用 saveEnrichData()，避免刚删除的文件又被自动同步重建
+      loadEnrichGroups({});
+      console.log('ℹ️ prompts.json 不存在，使用默认数据');
+      return;
+    }
     if (r.ok) {
       const d = await r.json();
       if (d && typeof d === 'object') {
@@ -981,12 +988,22 @@ async function loadDataConstants() {
 // enrich_groups 现在走通用同步通道；旧 6 个扁平键只用于一次性迁移，这里不再特殊跳过
 const ENRICH_KEYS = new Set();
 
+// 服务器端数据文件被删除/改名时，清空对应类别的本地缓存（文件即真相）。
+// 只清该类别，不动其他设置；网络故障（fetch 抛错）不会走到这里。
+function _clearLocalCategory(cat) {
+  const group = BACKUP_GROUPS[cat];
+  if (!group || group.server) return;
+  group.keys.forEach(k => storage.remove(k));
+  console.log('🧹 服务器文件缺失，已清空本地缓存:', cat);
+}
+
 async function loadAllFromServer() {
   if (!window.location.origin || !window.location.origin.startsWith('http')) return false;
   let total = 0;
   for (const cat of ['prompts', 'ai', 'comfy']) {
     try {
       const r = await fetch('/api/load-' + cat, { signal: AbortSignal.timeout(2000) });
+      if (r.status === 404) { _clearLocalCategory(cat); continue; }
       if (!r.ok) continue;
       const data = await r.json();
       if (!data) continue;
