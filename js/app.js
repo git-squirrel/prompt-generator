@@ -15,6 +15,7 @@ let enrichGroups = [];
 let _enrichGroupSeq = 1;
 
 let promptsEnabled = {};
+let promptsChance = {};   // 类别名 -> 出现概率(0-100)，缺省 100
 let DATA = null;
 
 // ============================================================
@@ -23,6 +24,7 @@ let DATA = null;
 const STORAGE_TO_SERVER = {
   prompts_data: 'pg_prompts_data',
   prompts_data_enabled: 'pg_prompts_data_enabled',
+  prompts_chance: 'pg_prompts_chance',
   identity_regions: 'pg_identity_regions',
   identity_genders: 'pg_identity_genders',
   identity_age: 'pg_identity_age',
@@ -50,7 +52,7 @@ function serverKey(shortName) {
 }
 
 const SERVER_KEYS = {
-  prompts: ['prompts_data','prompts_data_enabled','identity_regions','identity_genders','identity_age','identity_age_random','identity_region_random','identity_gender_random','identity_enabled','enrich_groups','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'],
+  prompts: ['prompts_data','prompts_data_enabled','prompts_chance','identity_regions','identity_genders','identity_age','identity_age_random','identity_region_random','identity_gender_random','identity_enabled','enrich_groups','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'],
   ai: ['ai_settings','ai_preset','ai_history'],
   comfy: ['comfy_settings','comfy_workflows','comfy_gallery']
 };
@@ -60,9 +62,10 @@ const SERVER_KEYS = {
 // ============================================================
 
 function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  // 同时转义引号，保证可安全用于标签文本与 HTML 属性两种场景
+  return String(str).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
 }
 
 function autoResizeTextarea(el) {
@@ -76,14 +79,39 @@ function resizePromptAreas() {
 }
 
 let toastTimer = null;
-function showToast(msg, type) {
+// action: { label, onClick } —— 在 toast 里附带一个操作按钮（目前用于「撤销删除」）
+function showToast(msg, type, action) {
   const el = document.getElementById('toast');
   if (!el) return;
-  el.textContent = msg;
+  el.textContent = '';
+  el.appendChild(document.createTextNode(msg));
+  if (action && action.label && typeof action.onClick === 'function') {
+    const b = document.createElement('button');
+    b.className = 'toast-action';
+    b.textContent = action.label;
+    b.onclick = () => { el.className = 'toast'; action.onClick(); };
+    el.appendChild(b);
+  }
   el.className = 'toast show';
   el.style.color = type === 'error' ? '#ef4444' : '#34d399';
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.className = 'toast'; }, 2500);
+  toastTimer = setTimeout(() => { el.className = 'toast'; }, action ? 6000 : 2500);
+}
+
+// ============================================================
+// SECTION 2.6: 删除撤销栈（内存，保留最近 5 步）
+// 类别/提示词/画廊清空都只有一次确认，手滑代价大，删除后 6 秒内可撤销
+// ============================================================
+const _undoStack = [];
+function pushUndo(label, restore) {
+  _undoStack.push({ label, restore });
+  if (_undoStack.length > 5) _undoStack.shift();
+}
+function undoLast() {
+  const u = _undoStack.pop();
+  if (!u) return;
+  u.restore();
+  showToast('↩️ 已撤销：' + u.label, 'success');
 }
 
 // ============================================================
@@ -371,14 +399,28 @@ function renderIdentityBar() {
   const regionRandomToggle = document.getElementById('regionRandomToggle');
   const genderRandomToggle = document.getElementById('genderRandomToggle');
 
+  // 用 DOM API 构建 option：地区/性别来自用户输入或导入数据，
+  // 拼进 innerHTML 存在注入风险（如输入 `"><img src=x onerror=...>`）
   if (regionSel) {
     const current = regionSel.value || identityRegions[0] || '';
-    regionSel.innerHTML = identityRegions.map(r => `<option value="${r}">${r}</option>`).join('');
+    regionSel.innerHTML = '';
+    identityRegions.forEach(r => {
+      const o = document.createElement('option');
+      o.value = r;
+      o.textContent = r;
+      regionSel.appendChild(o);
+    });
     if (identityRegions.includes(current)) regionSel.value = current;
   }
   if (genderSel) {
     const current = genderSel.value || identityGenders[0] || '';
-    genderSel.innerHTML = identityGenders.map(g => `<option value="${g}">${g}</option>`).join('');
+    genderSel.innerHTML = '';
+    identityGenders.forEach(g => {
+      const o = document.createElement('option');
+      o.value = g;
+      o.textContent = g;
+      genderSel.appendChild(o);
+    });
     if (identityGenders.includes(current)) genderSel.value = current;
   }
   if (ageSlider) {
@@ -507,7 +549,8 @@ function enrichGroupActive(g) {
 
 function normalizeEnrichGroups(list) {
   return (Array.isArray(list) ? list : []).filter(g => g && typeof g === 'object').map(g => ({
-    id: String(g.id || genEnrichGroupId()),
+    // id 会拼进 onclick 属性（deleteEnrichItem('${id}'...)），白名单字符集防注入
+    id: /^[A-Za-z0-9_-]+$/.test(String(g.id || '')) ? String(g.id) : genEnrichGroupId(),
     name: String(g.name || '未命名组'),
     icon: String(g.icon || '📄'),
     color: String(g.color || '#8d8d8d'),
@@ -692,6 +735,37 @@ async function deleteEnrichItem(groupId, lang, idx) {
 // SECTION 6: Prompt Generation
 // ============================================================
 
+// 统一抽取逻辑：按类别出现概率抽取、跨类别去重、保底至少一条。
+// randomPrompt 和 ComfyUI 批量生图共用，保证行为一致。
+function rollPicks() {
+  const enabledCats = DATA.filter(c => promptsEnabled[c.name] !== false && c.items.length);
+  const picks = [], seen = new Set();
+  enabledCats.forEach(cat => {
+    const chance = promptsChance[cat.name] != null ? promptsChance[cat.name] : 100;
+    if (chance < 100 && Math.random() * 100 >= chance) return;
+    let item = cat.items[Math.floor(Math.random() * cat.items.length)];
+    // 避免抽到与已选重复的词条（多个类别可能存在同名条目）
+    for (let g = 0; g < 5 && seen.has(item.cn); g++) {
+      item = cat.items[Math.floor(Math.random() * cat.items.length)];
+    }
+    if (seen.has(item.cn)) {
+      // 随机重试仍撞车时，退而挑一个该类目下没被用过的条目；全撞了才跳过
+      // （旧逻辑直接 return，整个类别本次不产出词条——数据里存在跨类别同名条目时会缺一块）
+      const alt = cat.items.find(it => !seen.has(it.cn));
+      if (!alt) return;
+      item = alt;
+    }
+    seen.add(item.cn);
+    picks.push(item);
+  });
+  // 兜底：概率设置过低导致一条都没抽中时，随机一个有内容的类别必出一条
+  if (!picks.length && enabledCats.length) {
+    const cat = enabledCats[Math.floor(Math.random() * enabledCats.length)];
+    picks.push(cat.items[Math.floor(Math.random() * cat.items.length)]);
+  }
+  return { picks, enabledCount: enabledCats.length };
+}
+
 function randomPrompt() {
   // Sync random-toggle states from DOM so freshly clicked checkboxes take effect immediately
   const ageRT = document.getElementById('ageRandomToggle');
@@ -703,22 +777,27 @@ function randomPrompt() {
 
   rollIdentity();   // 本次构建抽一次身份，保证中英文一致
 
-  // Treat undefined as enabled, consistent with renderCategories()
-  const enabledCats = DATA.filter(c => promptsEnabled[c.name] !== false);
-  if (enabledCats.length === 0) { showToast('⚠️ 请至少开启一个类别', 'error'); return; }
-  const picks = [];
-  enabledCats.forEach(cat => { if (cat.items.length) picks.push(cat.items[Math.floor(Math.random() * cat.items.length)]); });
+  const { picks, enabledCount } = rollPicks();
+  if (enabledCount === 0) { showToast('⚠️ 请至少开启一个类别', 'error'); return; }
   if (!picks.length) { showToast('⚠️ 已开启的类别中没有词条', 'error'); return; }
   const identity = getIdentityPrefix();
   const cn = [identity].concat(picks.map(p => p.cn)).filter(Boolean).join('，');
   setPrompt(cn, picks);
-  showToast(`✅ 已生成，共 ${enabledCats.length} 个类别`, 'success');
+  showToast(`✅ 已生成，抽取 ${picks.length}/${enabledCount} 个类别`, 'success');
 }
 
 function setPrompt(cnText, usedItems) {
   document.getElementById('promptArea').value = cnText;
   syncEn(cnText, usedItems);
   resizePromptAreas();
+}
+
+// 手动编辑中文后，英文框内容不再对应（英文框只读、不会自动同步），标灰提示
+function markEnStale(stale) {
+  const tea = document.getElementById('promptEnArea');
+  if (!tea) return;
+  tea.classList.toggle('en-stale', !!stale);
+  tea.title = stale ? '中文已被手动修改，英文可能已过期（点「优化」或重新「随机」可同步）' : '';
 }
 
 function syncEn(cnText, usedItems) {
@@ -736,6 +815,7 @@ function syncEn(cnText, usedItems) {
     }).join(', ');
   }
   document.getElementById('promptEnArea').value = en;
+  markEnStale(false);
 }
 
 function optimizePrompt() {
@@ -806,6 +886,7 @@ function optimizePrompt() {
 
   document.getElementById('promptArea').value = optimizedCn;
   document.getElementById('promptEnArea').value = optimizedEn;
+  markEnStale(false);
   resizePromptAreas();
   showToast('✨ 优化完成，已应用深度描述', 'success');
 }
@@ -822,6 +903,7 @@ function copyPrompt(id) {
 function clearPrompt() {
   document.getElementById('promptArea').value = '';
   document.getElementById('promptEnArea').value = '';
+  markEnStale(false);
   resizePromptAreas();
 }
 
@@ -838,6 +920,7 @@ function addToPrompt(text) {
     ta.value = text;
     tea.value = enFirst;
   }
+  markEnStale(false);
   resizePromptAreas();
   ta.focus();
 }
@@ -907,6 +990,7 @@ function saveData() {
   }));
   storage.set('prompts_data', toSave);
   storage.set('prompts_data_enabled', promptsEnabled);
+  storage.set('prompts_chance', promptsChance);
   syncAllToServer();
 }
 
@@ -919,8 +1003,8 @@ function syncAllToServer() {
   _syncTimer = setTimeout(_doSyncAllToServer, 600);
 }
 
-function _doSyncAllToServer() {
-  if (!window.location.origin || !window.location.origin.startsWith('http')) return;
+function _buildSyncPayloads() {
+  const out = [];
   ['prompts', 'ai', 'comfy'].forEach(cat => {
     const data = {};
     SERVER_KEYS[cat].forEach(k => {
@@ -931,15 +1015,39 @@ function _doSyncAllToServer() {
         console.warn('[sync] Failed to read key:', k, e.message);
       }
     });
-    if (Object.keys(data).length) {
-      fetch('/api/save-' + cat, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      }).catch(() => {});
-    }
+    if (Object.keys(data).length) out.push(['/api/save-' + cat, data]);
+  });
+  return out;
+}
+
+function _doSyncAllToServer() {
+  if (!window.location.origin || !window.location.origin.startsWith('http')) return;
+  _buildSyncPayloads().forEach(([url, data]) => {
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    }).catch(() => {});
   });
 }
+
+// 防抖窗口内直接关闭/切换标签页 → 这次修改只进了 localStorage、没进 data/*.json。
+// pagehide/隐藏时用 sendBeacon 补一次落盘（浏览器保证尽力送达，且不会阻塞卸载）。
+function flushSyncToServer() {
+  if (!_syncTimer) return;
+  clearTimeout(_syncTimer);
+  _syncTimer = null;
+  if (!window.location.origin || !window.location.origin.startsWith('http')) return;
+  _buildSyncPayloads().forEach(([url, data]) => {
+    try {
+      navigator.sendBeacon(url, new Blob([JSON.stringify(data)], { type: 'application/json' }));
+    } catch (e) { /* 页面正在卸载，忽略 */ }
+  });
+}
+window.addEventListener('pagehide', flushSyncToServer);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushSyncToServer();
+});
 
 async function loadDataConstants() {
   if (!window.location.origin || !window.location.origin.startsWith('http')) {
@@ -985,8 +1093,7 @@ async function loadDataConstants() {
   console.log('ℹ️ Data constants initialized (fallback defaults used if server unavailable)');
 }
 
-// enrich_groups 现在走通用同步通道；旧 6 个扁平键只用于一次性迁移，这里不再特殊跳过
-const ENRICH_KEYS = new Set();
+// enrich_groups 走通用同步通道；旧 6 个扁平键只用于一次性迁移（见 loadEnrichGroups）
 
 // 服务器端数据文件被删除/改名时，清空对应类别的本地缓存（文件即真相）。
 // 只清该类别，不动其他设置；网络故障（fetch 抛错）不会走到这里。
@@ -1008,7 +1115,6 @@ async function loadAllFromServer() {
       const data = await r.json();
       if (!data) continue;
       SERVER_KEYS[cat].forEach(k => {
-        if (ENRICH_KEYS.has(k)) return;
         const serverKeyName = serverKey(k);
         if (data[serverKeyName] !== undefined) {
           storage.set(k, data[serverKeyName]);
@@ -1042,7 +1148,11 @@ function renderCategories() {
     const checked = promptsEnabled[cat.name] !== false ? 'checked' : '';
     let headerHtml = `<div><span class="cat-name">${escapeHtml(cat.name)}</span><span class="cat-count">${cat.items.length}</span></div>`;
     if (isMgmt) {
-      headerHtml += `<button class="btn-del" onclick="deleteCategory(${idx})" title="删除此类别">✕</button>`;
+      // 管理模式：上移/下移（随机组合按类别顺序拼接）+ 删除
+      headerHtml += `<span style="display:inline-flex;align-items:center;gap:2px;">` +
+        `<button class="btn-del" style="color:var(--text2);" title="上移（随机组合时更靠前）" onclick="moveCategory(${idx},-1)">↑</button>` +
+        `<button class="btn-del" style="color:var(--text2);" title="下移（随机组合时更靠后）" onclick="moveCategory(${idx},1)">↓</button>` +
+        `<button class="btn-del" onclick="deleteCategory(${idx})" title="删除此类别">✕</button></span>`;
     } else {
       // 类别名由用户输入，不再拼接进 onchange 字符串（避免引号注入），改为 appendChild 后绑定事件
       headerHtml += `<label class="toggle"><input type="checkbox" ${checked}><span class="slider"></span></label>`;
@@ -1079,6 +1189,22 @@ function renderCategories() {
       mgmtBtn.textContent = '📝 管理提示词';
       mgmtBtn.onclick = () => openPromptManager(idx);
       actions.appendChild(mgmtBtn);
+      // 出现率：随机组合时该类别被抽中的概率，100% = 每次必出
+      const chanceWrap = document.createElement('label');
+      chanceWrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--text2);margin-left:auto;cursor:default;';
+      chanceWrap.appendChild(document.createTextNode('出现率'));
+      const cInput = document.createElement('input');
+      cInput.type = 'number';
+      cInput.min = 0;
+      cInput.max = 100;
+      cInput.step = 10;
+      cInput.value = promptsChance[cat.name] != null ? promptsChance[cat.name] : 100;
+      cInput.title = '随机组合时该类别被抽中的概率（100 = 每次必出，0 = 从不出）';
+      cInput.style.cssText = 'width:44px;padding:2px 4px;background:var(--surface);border:1px solid var(--border-strong);border-radius:6px;color:var(--text);font-size:10px;text-align:center;outline:none;font-family:inherit;';
+      cInput.onchange = () => { setCategoryChance(cat.name, cInput.value); cInput.value = promptsChance[cat.name]; };
+      chanceWrap.appendChild(cInput);
+      chanceWrap.appendChild(document.createTextNode('%'));
+      actions.appendChild(chanceWrap);
       card.appendChild(actions);
     }
     grid.appendChild(card);
@@ -1138,11 +1264,74 @@ async function deleteCategory(idx) {
   const cat = DATA[idx];
   if (!cat) return;
   if (!await uiConfirm(`确定要删除类别「${cat.name}」及其所有 ${cat.items.length} 条提示词？`, { danger: true, okText: '删除' })) return;
+  // 先快照再删，支持撤销
+  const snapshot = {
+    cat, idx,
+    enabled: promptsEnabled[cat.name],
+    chance: promptsChance[cat.name]
+  };
   DATA.splice(idx, 1);
   delete promptsEnabled[cat.name];
+  delete promptsChance[cat.name];
   saveData();
   renderCategories();
-  showToast(`🗑️ 已删除类别「${cat.name}」`, 'success');
+  pushUndo(`删除类别「${cat.name}」`, () => {
+    DATA.splice(Math.min(snapshot.idx, DATA.length), 0, snapshot.cat);
+    if (snapshot.enabled !== undefined) promptsEnabled[snapshot.cat.name] = snapshot.enabled;
+    if (snapshot.chance !== undefined) promptsChance[snapshot.cat.name] = snapshot.chance;
+    saveData();
+    renderCategories();
+  });
+  showToast(`🗑️ 已删除类别「${cat.name}」`, 'success', { label: '撤销', onClick: undoLast });
+}
+
+// 类别上移/下移：随机组合按 DATA 顺序拼接，顺序即语义顺序
+function moveCategory(idx, dir) {
+  const j = idx + dir;
+  if (idx < 0 || idx >= DATA.length || j < 0 || j >= DATA.length) return;
+  const t = DATA[idx];
+  DATA[idx] = DATA[j];
+  DATA[j] = t;
+  saveData();
+  renderCategories();
+}
+
+// 设置类别出现概率（0-100），100 = 每次必出
+function setCategoryChance(name, val) {
+  let v = Math.round(Number(val));
+  if (isNaN(v)) v = 100;
+  v = Math.max(0, Math.min(100, v));
+  promptsChance[name] = v;
+  storage.set('prompts_chance', promptsChance);
+  syncAllToServer();
+}
+
+// 语义槽位顺序：让随机拼接按「画质→主体→外观→表情→服装→动作→道具→场景→氛围→构图」成句
+const SLOT_ORDER_KEYWORDS = [
+  ['画质', '质量', '画风', '风格', '渲染'],              // 0 画质/风格
+  ['身份', '人物', '职业', '年龄', '性别'],              // 1 主体身份
+  ['外貌', '发型', '发色', '眼', '脸', '皮肤', '身材', '体型'], // 2 外观
+  ['表情', '情绪', '神态'],                              // 3 表情
+  ['服装', '服饰', '配饰', '首饰', '纹身', '标记'],       // 4 服装/装饰
+  ['动作', '姿势', '姿态'],                              // 5 动作
+  ['道具', '物品', '手持'],                              // 6 道具
+  ['场景', '环境', '地点', '背景', '室内', '室外'],       // 7 场景
+  ['天气', '季节', '四季', '时间', '光线', '光照', '氛围', '液体'], // 8 氛围
+  ['构图', '景别', '镜头', '视角', '角度', '焦距']        // 9 构图最后
+];
+
+function _slotRank(name) {
+  for (let i = 0; i < SLOT_ORDER_KEYWORDS.length; i++) {
+    if (SLOT_ORDER_KEYWORDS[i].some(k => name.includes(k))) return i;
+  }
+  return 4.5; // 未识别的类别排在中间（服装之后、动作之前）
+}
+
+function semanticSortCategories() {
+  DATA.sort((a, b) => _slotRank(a.name) - _slotRank(b.name));
+  saveData();
+  renderCategories();
+  showToast('✅ 已按语义顺序排列类别', 'success');
 }
 
 // ============================================================
@@ -1350,13 +1539,21 @@ function batchAddPrompts() {
 function deletePrompt(catIdx, itemIdx) {
   const cat = DATA[catIdx];
   if (!cat || !cat.items[itemIdx]) return;
-  const cn = cat.items[itemIdx].cn;
+  const item = cat.items[itemIdx];
+  const cn = item.cn;
   cat.items.splice(itemIdx, 1);
   saveData();
   const body = document.getElementById('pmBody');
   if (body) renderPromptManager(body);
   renderCategories();
-  showToast(`🗑️ 已删除「${cn}」`, 'success');
+  pushUndo(`删除「${cn}」`, () => {
+    cat.items.splice(Math.min(itemIdx, cat.items.length), 0, item);
+    saveData();
+    const b2 = document.getElementById('pmBody');
+    if (b2) renderPromptManager(b2);
+    renderCategories();
+  });
+  showToast(`🗑️ 已删除「${cn}」`, 'success', { label: '撤销', onClick: undoLast });
 }
 
 // ============================================================
@@ -1872,6 +2069,7 @@ async function aiPolish() {
       if (polEn) document.getElementById('promptEnArea').value = polEn;
       if (!polCn && !polEn) document.getElementById('promptArea').value = reply;
     }
+    markEnStale(false);
     showToast('✅ AI 润色完成', 'success');
   } catch (e) {
     showToast('❌ AI 润色失败: ' + e.message, 'error');
@@ -1908,9 +2106,15 @@ function loadShutdownUI() {
   if (min) min.value = comfySettings.shutdownMinutes;
 }
 
-function saveShutdownSettings() {
+// 开启自动关机属于不可逆操作，先二次确认（关机命令一旦发出只能靠 shutdown /a 取消）
+async function saveShutdownSettings() {
   const tog = document.getElementById('shutdownToggle');
   const min = document.getElementById('shutdownMinutes');
+  if (tog && tog.checked && !comfySettings.autoShutdown) {
+    const mins = parseInt(min && min.value) || 5;
+    const ok = await uiConfirm(`开启后，本次生图全部完成 ${mins} 分钟将自动关闭电脑。确认开启？`, { danger: true, okText: '开启' });
+    if (!ok) { tog.checked = false; return; }
+  }
   if (tog) comfySettings.autoShutdown = tog.checked;
   if (min) comfySettings.shutdownMinutes = parseInt(min.value) || 5;
   saveComfySettings();
@@ -1955,7 +2159,12 @@ function getComfyBaseUrl() {
   return comfySettings.url.replace(/\/+$/, '');
 }
 
-async function checkComfyConnection() {
+// attempt 计数：proxy↔direct 各只自动切换一次。
+// 旧实现没有上限，两端都连不上时会无限递归（每轮 await 保留父帧，栈持续增长），
+// 且每轮 saveComfySettings() → 600ms 防抖后全量写 comfy_settings.json（含工作流，上限 5MB），
+// 等于每 ~6 秒写一次盘。
+async function checkComfyConnection(attempt) {
+  attempt = attempt || 0;
   try {
     const url = getComfyBaseUrl() + '/system_stats';
     const r = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(3000) });
@@ -1964,25 +2173,35 @@ async function checkComfyConnection() {
     updateComfyStatus();
     return comfyConnected;
   } catch (e) {
-    if (comfySettings.useProxy) {
+    if (attempt === 0 && comfySettings.useProxy) {
+      // 代理失败 → 试一次直连；成功才落盘，失败则结束（不再递归）
       comfySettings.useProxy = false;
-      saveComfySettings();
       try {
         const url = comfySettings.url.replace(/\/+$/, '') + '/system_stats';
         const r = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(3000) });
         comfyConnected = r.ok;
         updateComfyStatus();
-        if (comfyConnected) showToast('⚠️ 代理不可用，已切换到直连', 'error');
-        return comfyConnected;
+        if (comfyConnected) {
+          saveComfySettings();
+          showToast('⚠️ 代理不可用，已切换到直连', 'error');
+          return true;
+        }
       } catch (e2) {
         console.warn('[checkComfyConnection] Direct connection failed:', e2.message);
       }
+      // 两端都失败：恢复用户的代理设置，本次到此为止
+      comfySettings.useProxy = true;
+      comfyConnected = false;
+      updateComfyStatus();
+      showToast('⚠️ ComfyUI 未连接（代理与直连均失败）', 'error');
+      return false;
     }
     const origin = window.location.origin;
-    if (origin && origin.startsWith('http') && !comfySettings.useProxy) {
+    if (attempt === 0 && origin && origin.startsWith('http') && !comfySettings.useProxy) {
+      // 直连失败 → 试一次代理
       comfySettings.useProxy = true;
       saveComfySettings();
-      return await checkComfyConnection();
+      return await checkComfyConnection(1);
     }
     comfyConnected = false;
     updateComfyStatus();
@@ -2144,6 +2363,7 @@ function saveComfyGallery() {
 const GALLERY_COLS = 4;
 const GALLERY_GAP = 12;
 const _galleryAspect = {};        // url -> 高/宽，图片加载后缓存
+let _galleryLastSig = '';         // 上次渲染的分列签名，用于跳过无变化的全量重建
 let _galleryRelayoutTimer = null;
 let _galleryRelayoutPending = false;
 
@@ -2176,25 +2396,32 @@ function _galleryColsForWidth() {
   return w <= 620 ? 2 : (w <= 900 ? 3 : GALLERY_COLS);
 }
 
-// 图片加载失败（ComfyUI 重启/输出被清理后旧链接失效）→ 替换为占位图，避免裂图
-const GALLERY_BROKEN_PLACEHOLDER =
-  'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+// 占位图跟随主题：浅色主题下不再出现突兀的深灰块
+function _brokenPlaceholder() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const bg = dark ? '#3a3a3a' : '#e8eaed';
+  const fg = dark ? '#888888' : '#9aa0a6';
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">' +
-    '<rect width="100%" height="100%" fill="#3a3a3a"/>' +
-    '<text x="50%" y="50%" fill="#888" font-size="14" text-anchor="middle" dominant-baseline="middle">图片已失效</text>' +
+    `<rect width="100%" height="100%" fill="${bg}"/>` +
+    `<text x="50%" y="50%" fill="${fg}" font-size="14" text-anchor="middle" dominant-baseline="middle">图片已失效</text>` +
     '</svg>');
+}
 
 function galleryImgError(img) {
   if (!img) return;
   img.onerror = null;
-  img.src = GALLERY_BROKEN_PLACEHOLDER;
+  img.src = _brokenPlaceholder();
   img.style.objectFit = 'cover';
 }
 
 function _galleryItemHTML(item, idx) {
   const hasBadge = item.badge !== undefined && item.badge !== null && String(item.badge) !== '';
+  // 已知宽高比时用 aspect-ratio 占位，减少图片加载/重排时的跳动
+  const a = _galleryAspect[item.url];
+  const arStyle = (typeof a === 'number' && a > 0) ? ` style="aspect-ratio:${(1 / a).toFixed(4)}"` : '';
   return `<div class="gallery-item" onclick="openGalleryModal(${idx})">
-    <img src="${item.url}" alt="gallery" loading="lazy" onload="galleryImgLoaded(this)" onerror="galleryImgError(this)">
+    <img src="${escapeHtml(item.url)}" alt="gallery" loading="lazy"${arStyle} onload="galleryImgLoaded(this)" onerror="galleryImgError(this)">
     <div class="gallery-bar" onclick="event.stopPropagation()">
       ${hasBadge ? `<span class="gallery-idx">#${escapeHtml(String(item.badge))}</span>` : ''}
       <button class="gallery-btn" onclick="downloadGalleryImg(${idx})" title="下载原图">
@@ -2234,6 +2461,12 @@ function renderComfyGallery() {
     buckets[t].h += _galleryAspectOf(item) * colW + GALLERY_GAP;
   });
 
+  // 分列结果没变就跳过重建：否则每张图 onload 都会 innerHTML 重建整个画廊，
+  // 200 张时造成反复闪烁和滚动位置跳动（O(n²) 的 DOM 重建）
+  const sig = cols + '|' + buckets.map(b => b.idxs.join(',')).join('|');
+  if (sig === _galleryLastSig && grid.children.length) return;
+  _galleryLastSig = sig;
+
   // 空列容器也保留：否则图少于列数时，仅存的列会被 flex 拉伸到整宽
   grid.innerHTML = buckets
     .map(b => `<div class="gallery-col">${b.idxs.map(i => _galleryItemHTML(comfyGallery[i], i)).join('')}</div>`)
@@ -2249,22 +2482,37 @@ if (typeof window !== 'undefined' && !window.__pgGalleryResizeBound) {
   });
 }
 
+let _galleryCapToastAt = 0;
 function addToComfyGallery(imgUrl, badge, prompt, seed) {
   comfyGallery.unshift({ url: imgUrl, badge: String(badge || ''), ts: Date.now(), prompt: prompt || '', seed: seed || '' });
-  if (comfyGallery.length > 200) comfyGallery = comfyGallery.slice(0, 200);
+  if (comfyGallery.length > 200) {
+    comfyGallery = comfyGallery.slice(0, 200);
+    // 上限静默丢弃用户无感知，提示一次（批量生图时节流 30s，避免刷屏）
+    if (Date.now() - _galleryCapToastAt > 30000) {
+      _galleryCapToastAt = Date.now();
+      showToast('⚠️ 画廊已达 200 张上限，最旧的图片已被移除', 'error');
+    }
+  }
   saveComfyGallery();
   renderComfyGallery();
 }
 
 async function clearComfyGallery() {
   if (!await uiConfirm('确定清空所有图片？', { danger: true, okText: '清空' })) return;
+  const snapshot = comfyGallery.slice();
   comfyGallery = [];
   saveComfyGallery();
   renderComfyGallery();
-  showToast('🗑️ 画廊已清空', 'success');
+  pushUndo(`清空画廊（${snapshot.length} 张）`, () => {
+    comfyGallery = snapshot;
+    saveComfyGallery();
+    renderComfyGallery();
+  });
+  showToast('🗑️ 画廊已清空', 'success', { label: '撤销', onClick: undoLast });
 }
 
 let _currentModalIdx = -1;
+let _imgModalKeyHandler = null;
 
 function openGalleryModal(idx) {
   const item = comfyGallery[idx];
@@ -2280,6 +2528,17 @@ function openGalleryModal(idx) {
   if (seedEl) seedEl.textContent = item.seed || '(无记录)';
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
+  // 键盘支持：Esc 关闭，←/→ 在同一会话的画廊里翻页（其他对话框都有 Esc，这里原先没有）
+  if (_imgModalKeyHandler) document.removeEventListener('keydown', _imgModalKeyHandler, true);
+  _imgModalKeyHandler = (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); closeImgModal(); }
+    else if (e.key === 'ArrowLeft' && comfyGallery.length > 1) {
+      openGalleryModal((_currentModalIdx + 1) % comfyGallery.length);
+    } else if (e.key === 'ArrowRight' && comfyGallery.length > 1) {
+      openGalleryModal((_currentModalIdx - 1 + comfyGallery.length) % comfyGallery.length);
+    }
+  };
+  document.addEventListener('keydown', _imgModalKeyHandler, true);
 }
 
 function closeImgModal() {
@@ -2289,6 +2548,10 @@ function closeImgModal() {
   document.getElementById('imgModalImg').src = '';
   _currentModalIdx = -1;
   document.body.style.overflow = '';
+  if (_imgModalKeyHandler) {
+    document.removeEventListener('keydown', _imgModalKeyHandler, true);
+    _imgModalKeyHandler = null;
+  }
 }
 
 function downloadCurrentModalImg() {
@@ -2439,15 +2702,12 @@ async function _prepareOnePrompt(idx, startTime, completed, total, wf) {
   try {
     rollIdentity();   // 本组提示词抽一次身份，中英文共用
     let promptText = '';
-    let picks = [];
-    // Treat undefined as enabled, consistent with renderCategories()
-    const ec = DATA.filter(c => promptsEnabled[c.name] !== false);
-    if (ec.length > 0) {
+    // 与 randomPrompt 共用同一套抽取逻辑（概率/去重/兜底）
+    const picks = rollPicks().picks;
+    if (picks.length > 0) {
       if (comfySettings.language === 'en') {
-        ec.forEach(c => { if (c.items.length) picks.push(c.items[Math.floor(Math.random() * c.items.length)]); });
         promptText = picks.map(p => p.en.split('/')[0].trim()).filter(Boolean).join(', ');
       } else {
-        ec.forEach(c => { if (c.items.length) picks.push(c.items[Math.floor(Math.random() * c.items.length)]); });
         promptText = [getIdentityPrefix()].concat(picks.map(p => p.cn)).filter(Boolean).join('，');
       }
     }
@@ -2486,6 +2746,7 @@ async function _prepareOnePrompt(idx, startTime, completed, total, wf) {
     }
     const cnFinal = cnArea.value.trim();
     const enFinal = enArea.value.trim();
+    markEnStale(false);
     // 修复：原写法在 language==='en' 时会把 en 恒置为 ''，
     // 导致下游取 currentPrompt.en 得到空串，被误判为“提示词为空”而跳过。
     return { cn: cnFinal || enFinal, en: enFinal || cnFinal, rawCn: cnFinal, rawEn: enFinal };
@@ -2887,7 +3148,7 @@ function openComfySettings() {
 // ============================================================
 
 const BACKUP_GROUPS = {
-  prompts: { keys: ['prompts_data','prompts_data_enabled','identity_regions','identity_genders','identity_age','identity_age_random','identity_region_random','identity_gender_random','identity_enabled','enrich_groups','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'], name: '提示词与类别' },
+  prompts: { keys: ['prompts_data','prompts_data_enabled','prompts_chance','identity_regions','identity_genders','identity_age','identity_age_random','identity_region_random','identity_gender_random','identity_enabled','enrich_groups','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'], name: '提示词与类别' },
   ai: { keys: ['ai_settings','ai_preset','ai_history'], name: 'AI 润色设置' },
   comfy: { keys: ['comfy_settings','comfy_workflows','comfy_gallery'], name: 'ComfyUI 设置' },
   server_config: { keys: ['port','host','comfy_url','html_file'], name: '服务配置', server: true }
@@ -2908,7 +3169,8 @@ function _exportGroup(cat, info) {
   a.href = URL.createObjectURL(blob);
   a.download = cat + '_backup_' + new Date().toISOString().slice(0, 10) + '.json';
   a.click();
-  URL.revokeObjectURL(a.href);
+  // 延迟回收：click 后同步 revoke 在 Firefox/Safari 可能取消下载
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 async function _exportServerConfig() {
@@ -3036,6 +3298,7 @@ async function init() {
 
   const savedData = storage.get('prompts_data');
   const savedEnabled = storage.get('prompts_data_enabled');
+  promptsChance = storage.get('prompts_chance') || {};
   if (savedData) {
     DATA = savedData;
   } else {
@@ -3061,6 +3324,9 @@ async function init() {
   renderIdentityBar();
   renderComfyGallery();
   resizePromptAreas();
+  // 手动输入中文（isTrusted=true 的真实键盘输入）后，英文框标记为「可能已过期」
+  const cnTa = document.getElementById('promptArea');
+  if (cnTa) cnTa.addEventListener('input', (e) => { if (e.isTrusted) markEnStale(true); });
   setTimeout(() => checkComfyConnection(), 500);
 }
 

@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:,">
 <title>提示词生成器 · Prompt Generator</title>
 <link rel="stylesheet" href="css/style.css">
 <script>
@@ -176,6 +177,10 @@
       <textarea id="batchCatInput" class="mgmt-textarea" rows="2" placeholder="批量添加：每行一个类别名称"></textarea>
       <button class="btn btn-sm btn-add" onclick="batchAddCategories()" style="margin-top:0">批量添加</button>
     </div>
+    <div class="mgmt-row">
+      <button class="btn btn-sm btn-add" onclick="semanticSortCategories()" style="font-size:10px;">按语义排序类别</button>
+      <span style="font-size:10px;color:var(--text2);">按「画质→主体→外观→服装→动作→场景→氛围→构图」排列，随机拼接更连贯；也可用卡片上的 ↑↓ 微调</span>
+    </div>
     <div style="border-top:1px solid var(--border);margin:12px 0 10px;"></div>
     <div style="font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px;"><svg class="icon" style="width:14px;height:14px;color:var(--accent-2);"><use href="#icon-user"/></svg> 身份管理</div>
     <div class="mgmt-row">
@@ -200,7 +205,7 @@
     <!-- 润色模板管理 -->
     <div style="border-top:1px solid var(--border);margin:12px 0 10px;"></div>
     <div style="font-size:13px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px;"><svg class="icon" style="width:14px;height:14px;color:var(--accent-2);"><use href="#icon-doc"/></svg> 润色模板</div>
-    <div style="font-size:10px;color:var(--text2);margin-bottom:8px;">用于 optimizePrompt 润色功能，分为 6 组模板</div>
+    <div style="font-size:10px;color:var(--text2);margin-bottom:8px;">用于 optimizePrompt 润色功能，默认 3 组（画面/皮肤/画质），可自由增删</div>
     <div id="enrichMgmtContainer"></div>
   </div><!-- end mgmtPanel -->
 
@@ -225,7 +230,7 @@
 </div>
 
 <!-- Image Modal -->
-<div class="img-modal" id="imgModal" onclick="closeImgModal()">
+<div class="img-modal" id="imgModal" role="dialog" aria-modal="true" aria-label="图片预览" onclick="closeImgModal()">
   <span class="img-modal-close" onclick="event.stopPropagation();closeImgModal()">&times;</span>
   <div style="position:relative;display:inline-block;max-width:92vw;max-height:90vh;" onclick="event.stopPropagation()">
     <img class="img-modal-content" id="imgModalImg" src="" alt="enlarged image" style="display:block;">

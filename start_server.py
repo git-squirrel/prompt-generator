@@ -11,6 +11,7 @@ import os
 import sys
 import json
 import shutil
+import subprocess
 import threading
 import time
 import urllib.request
@@ -98,8 +99,53 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
         p = urllib.parse.unquote(self.path.split('?')[0]).lower()
         return any(p.startswith(b) or p == b.rstrip('/') for b in self.BLOCKED_PATHS)
 
+    def _allowed_origin(self):
+        """CORS 来源白名单：只放行「本服务自身」和 localhost/127.0.0.1 的来源。
+
+        之前对所有响应返回 Access-Control-Allow-Origin: *，导致任意网页都能用
+        fetch('http://127.0.0.1:8080/api/load-ai') 读到 ai_settings.json 全文
+        （含 apiKey）。GET 属 CORS 简单请求、无需预检，所以必须收紧来源。
+        """
+        origin = self.headers.get('Origin')
+        if not origin:
+            return None
+        try:
+            o = urllib.parse.urlparse(origin)
+            host = (self.headers.get('Host') or '').split(':')[0]
+            if o.hostname in ('127.0.0.1', 'localhost', '::1'):
+                return origin
+            # 允许「与自己同源」的访问（例如局域网 IP 打开页面时 Origin=Host）
+            if host and o.hostname == host:
+                return origin
+        except Exception:
+            pass
+        return None
+
+    def _is_foreign_origin(self):
+        """请求带了 Origin 但不在白名单内 → 跨站请求，一律拒绝"""
+        return 'Origin' in self.headers and self._allowed_origin() is None
+
+    def _reject_foreign(self):
+        self.send_response(403)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(b'{"error":"Forbidden: cross-site origin"}')
+
+    def _send_cors_origin(self):
+        # 幂等：handler 与 end_headers 都会调用，避免同一响应出现两条 ACAO
+        if getattr(self, '_cors_sent', False):
+            return
+        self._cors_sent = True
+        origin = self._allowed_origin()
+        if origin:
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Vary', 'Origin')
+
     def do_PROXY(self, method):
         """Handle proxied requests to /comfy-proxy/*"""
+        if self._is_foreign_origin():
+            self._reject_foreign()
+            return
         if not self.enable_proxy:
             self.send_response(503)
             self.end_headers()
@@ -132,8 +178,8 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
 
             with urllib.request.urlopen(req, timeout=120) as response:
                 self.send_response(response.status)
-                # Forward CORS headers
-                self.send_header('Access-Control-Allow-Origin', '*')
+                # Forward CORS headers（仅白名单来源）
+                self._send_cors_origin()
                 self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
                 self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
                 self.send_header('Content-Type', response.headers.get('Content-Type', 'application/json'))
@@ -146,26 +192,29 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
 
         except urllib.error.HTTPError as e:
             self.send_response(e.code)
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(e.read())
         except urllib.error.URLError as e:
             self.send_response(502)
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             error_msg = json.dumps({"error": f"Cannot connect to ComfyUI: {e.reason}"}).encode()
             self.wfile.write(error_msg)
         except Exception as e:
             self.send_response(500)
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             error_msg = json.dumps({"error": str(e)}).encode()
             self.wfile.write(error_msg)
 
     def do_GET(self):
+        if self._is_foreign_origin():
+            self._reject_foreign()
+            return
         if self.path.startswith('/comfy-proxy/'):
             self.do_PROXY('GET')
             return
@@ -197,6 +246,9 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
+        if self._is_foreign_origin():
+            self._reject_foreign()
+            return
         if self.path.startswith('/comfy-proxy/'):
             self.do_PROXY('POST')
             return
@@ -221,7 +273,7 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
     def _handle_load_config(self):
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self._send_cors_origin()
         self.end_headers()
         if os.path.exists(CONFIG_FILE):
             try:
@@ -238,7 +290,7 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
             if content_len > MAX_BODY_SIZES['server_config.json']:
                 self.send_response(413)
                 self.send_header('Content-Type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self._send_cors_origin()
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": "请求体过大"}).encode())
                 return
@@ -249,19 +301,19 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
                 f.write(body.decode('utf-8'))
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.end_headers()
             self.wfile.write(b'{"ok":true}')
         except (json.JSONDecodeError, ValueError) as e:
             self.send_response(400)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.end_headers()
             self.wfile.write(json.dumps({"error": str(e)}).encode())
         except Exception as e:
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.end_headers()
             self.wfile.write(json.dumps({"error": str(e)}).encode())
 
@@ -272,7 +324,7 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
         if client_ip not in ('127.0.0.1', '::1', 'localhost'):
             self.send_response(403)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.end_headers()
             self.wfile.write(json.dumps({"error": "仅本机可触发关机"}).encode())
             return
@@ -284,19 +336,18 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
             if seconds > 3600: seconds = 3600
             # Trigger shutdown in a separate thread so we can respond first
             def _do_shutdown():
-                import subprocess
                 subprocess.run(['shutdown', '/s', '/t', str(seconds)], shell=False)
             threading.Thread(target=_do_shutdown, daemon=True).start()
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.end_headers()
             self.wfile.write(json.dumps({"ok": True, "seconds": seconds}).encode())
             print(f'  [shutdown] 将在 {seconds} 秒后关机')
         except Exception as e:
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.end_headers()
             self.wfile.write(json.dumps({"error": str(e)}).encode())
 
@@ -307,13 +358,13 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
         if not data_file or not os.path.exists(data_file):
             self.send_response(404)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.end_headers()
             self.wfile.write(json.dumps({"error": f"{filename} not found"}).encode())
             return
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self._send_cors_origin()
         self.end_headers()
         try:
             with open(data_file, 'r', encoding='utf-8') as f:
@@ -347,23 +398,6 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(b'{}')
 
 
-    def _handle_load_json_file(self, filename):
-        """Serve a static JSON file from data_dir directly, or return {} if missing."""
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
-        data_file = os.path.join(self.data_dir, filename) if self.data_dir else None
-        if data_file and os.path.exists(data_file):
-            try:
-                with open(data_file, 'r', encoding='utf-8') as f:
-                    content = json.load(f)
-                self.wfile.write(json.dumps(content, ensure_ascii=False).encode('utf-8'))
-                return
-            except Exception as e:
-                print(f'  [error] Reading {filename}: {e}')
-        self.wfile.write(b'{}')
-
     def _handle_save_file(self, filename):
         try:
             content_len = int(self.headers.get('Content-Length', 0))
@@ -371,7 +405,7 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
             if content_len > max_size:
                 self.send_response(413)
                 self.send_header('Content-Type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self._send_cors_origin()
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": f"请求体过大，最大 {max_size // 1024}KB"}).encode())
                 return
@@ -385,32 +419,35 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
                     json.dump(data, f, ensure_ascii=False, indent=2)
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.end_headers()
             self.wfile.write(b'{"ok":true}')
         except json.JSONDecodeError as e:
             self.send_response(400)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.end_headers()
             self.wfile.write(json.dumps({"error": f"JSON 解析错误: {str(e)}"}).encode())
         except ValueError as e:
             self.send_response(400)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.end_headers()
             self.wfile.write(json.dumps({"error": str(e)}).encode())
         except Exception as e:
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.end_headers()
             self.wfile.write(json.dumps({"error": str(e)}).encode())
 
     def do_OPTIONS(self):
         if self.path.startswith('/comfy-proxy/'):
+            if self._is_foreign_origin():
+                self._reject_foreign()
+                return
             self.send_response(200)
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
             self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
             self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
             self.end_headers()
@@ -418,9 +455,9 @@ class ComfyProxyHandler(http.server.SimpleHTTPRequestHandler):
         super().do_OPTIONS()
 
     def end_headers(self):
-        # Add CORS headers to all responses
+        # CORS 仅放行白名单来源（见 _allowed_origin），不再使用通配符 *
         if not self.path.startswith('/comfy-proxy/'):
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_origin()
         super().end_headers()
 
 

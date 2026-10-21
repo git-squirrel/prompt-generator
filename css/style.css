@@ -196,6 +196,19 @@ h1 { display: none; }
 .toast.show { opacity: 1; transform: translateY(0); }
 .toast.success { background: var(--green-soft); color: var(--green); }
 .toast.error { background: var(--red-soft); color: var(--red); }
+/* toast 内的操作按钮（撤销删除等）；父级 toast 有 pointer-events:none，按钮需单独恢复 */
+.toast-action {
+  pointer-events: auto; margin-left: 8px; padding: 2px 10px;
+  font-size: 11px; font-weight: 700; font-family: inherit; cursor: pointer;
+  color: var(--accent); background: var(--surface);
+  border: 1px solid var(--accent); border-radius: 999px;
+}
+.toast-action:hover { background: var(--accent); color: #fff; }
+/* toast 隐藏（仅 opacity:0）时按钮仍可点，会挡住后面的内容，显式禁用 */
+.toast:not(.show) .toast-action { pointer-events: none; }
+
+/* 中文被手动编辑后，英文框标灰表示内容可能已过期 */
+#promptEnArea.en-stale { opacity: .55; }
 
 /* === Identity bar === */
 .identity-bar {
