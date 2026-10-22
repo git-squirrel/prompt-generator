@@ -16,6 +16,7 @@ let _enrichGroupSeq = 1;
 
 let promptsEnabled = {};
 let promptsChance = {};   // 类别名 -> 出现概率(0-100)，缺省 100
+let promptsLocked = {};   // 类别名 -> [cn,...] 锁定的提示词，每次随机必出（该类别不再随机补抽）
 let DATA = null;
 
 // ============================================================
@@ -25,6 +26,7 @@ const STORAGE_TO_SERVER = {
   prompts_data: 'pg_prompts_data',
   prompts_data_enabled: 'pg_prompts_data_enabled',
   prompts_chance: 'pg_prompts_chance',
+  prompts_locked: 'pg_prompts_locked',
   identity_regions: 'pg_identity_regions',
   identity_genders: 'pg_identity_genders',
   identity_age: 'pg_identity_age',
@@ -52,7 +54,7 @@ function serverKey(shortName) {
 }
 
 const SERVER_KEYS = {
-  prompts: ['prompts_data','prompts_data_enabled','prompts_chance','identity_regions','identity_genders','identity_age','identity_age_random','identity_region_random','identity_gender_random','identity_enabled','enrich_groups','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'],
+  prompts: ['prompts_data','prompts_data_enabled','prompts_chance','prompts_locked','identity_regions','identity_genders','identity_age','identity_age_random','identity_region_random','identity_gender_random','identity_enabled','enrich_groups','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'],
   ai: ['ai_settings','ai_preset','ai_history'],
   comfy: ['comfy_settings','comfy_workflows','comfy_gallery']
 };
@@ -741,6 +743,15 @@ function rollPicks() {
   const enabledCats = DATA.filter(c => promptsEnabled[c.name] !== false && c.items.length);
   const picks = [], seen = new Set();
   enabledCats.forEach(cat => {
+    // 锁定类别：锁定的提示词（仍存在于该类别中的）每次必出，不再随机补抽
+    const lockedCns = promptsLocked[cat.name];
+    if (Array.isArray(lockedCns) && lockedCns.length) {
+      lockedCns.forEach(cn => {
+        const item = cat.items.find(it => it.cn === cn);
+        if (item && !seen.has(item.cn)) { seen.add(item.cn); picks.push(item); }
+      });
+      return;
+    }
     const chance = promptsChance[cat.name] != null ? promptsChance[cat.name] : 100;
     if (chance < 100 && Math.random() * 100 >= chance) return;
     let item = cat.items[Math.floor(Math.random() * cat.items.length)];
@@ -790,6 +801,7 @@ function setPrompt(cnText, usedItems) {
   document.getElementById('promptArea').value = cnText;
   syncEn(cnText, usedItems);
   resizePromptAreas();
+  refreshChipHighlights();
 }
 
 // 手动编辑中文后，英文框内容不再对应（英文框只读、不会自动同步），标灰提示
@@ -888,6 +900,7 @@ function optimizePrompt() {
   document.getElementById('promptEnArea').value = optimizedEn;
   markEnStale(false);
   resizePromptAreas();
+  refreshChipHighlights();
   showToast('✨ 优化完成，已应用深度描述', 'success');
 }
 
@@ -905,6 +918,18 @@ function clearPrompt() {
   document.getElementById('promptEnArea').value = '';
   markEnStale(false);
   resizePromptAreas();
+  refreshChipHighlights();
+}
+
+// 高亮已填入提示词框的词条 chip；提示词内容任何变化（点选/随机/优化/AI/手动输入）后调用
+function refreshChipHighlights() {
+  const ta = document.getElementById('promptArea');
+  if (!ta) return;
+  const v = ta.value;
+  document.querySelectorAll('.cat-preview .chip').forEach(ch => {
+    const cn = ch.dataset.cn || ch.textContent;
+    ch.classList.toggle('chip-active', !!cn && v.includes(cn));
+  });
 }
 
 function addToPrompt(text) {
@@ -922,6 +947,7 @@ function addToPrompt(text) {
   }
   markEnStale(false);
   resizePromptAreas();
+  refreshChipHighlights();
   ta.focus();
 }
 
@@ -991,6 +1017,7 @@ function saveData() {
   storage.set('prompts_data', toSave);
   storage.set('prompts_data_enabled', promptsEnabled);
   storage.set('prompts_chance', promptsChance);
+  storage.set('prompts_locked', promptsLocked);
   syncAllToServer();
 }
 
@@ -1140,8 +1167,11 @@ function renderCategories() {
   const isMgmt = document.getElementById('mgmtPanel').style.display !== 'none';
   DATA.forEach((cat, idx) => {
     total += cat.items.length;
+    // 锁定状态：只统计仍存在于该类别中的锁定词条
+    const lockedCns = Array.isArray(promptsLocked[cat.name]) ? promptsLocked[cat.name] : [];
+    const lockCount = lockedCns.filter(cn => cat.items.some(it => it.cn === cn)).length;
     const card = document.createElement('div');
-    card.className = 'cat-card' + (promptsEnabled[cat.name] !== false ? ' enabled' : '');
+    card.className = 'cat-card' + (promptsEnabled[cat.name] !== false ? ' enabled' : '') + (lockCount ? ' cat-locked' : '');
     card.dataset.idx = idx;
     const header = document.createElement('div');
     header.className = 'cat-header';
@@ -1158,6 +1188,16 @@ function renderCategories() {
       headerHtml += `<label class="toggle"><input type="checkbox" ${checked}><span class="slider"></span></label>`;
     }
     header.innerHTML = headerHtml;
+    // 锁定按钮：普通/管理模式都显示；点击打开锁定选择弹窗
+    const lockBtn = document.createElement('button');
+    lockBtn.className = 'btn-lock' + (lockCount ? ' locked' : '');
+    lockBtn.title = lockCount
+      ? `已锁定 ${lockCount} 条提示词（每次随机必出），点击管理锁定`
+      : '锁定提示词：锁定的词条每次随机都会出现';
+    lockBtn.innerHTML = `<svg class="icon"><use href="#icon-lock"/></svg>` +
+      (lockCount ? `<span class="lock-count">${lockCount}</span>` : '');
+    lockBtn.onclick = (e) => { e.stopPropagation(); openLockPicker(idx); };
+    header.insertBefore(lockBtn, header.children[1]);
     if (!isMgmt) {
       const cb = header.querySelector('input[type="checkbox"]');
       if (cb) cb.addEventListener('change', () => toggleCat(cat.name, cb.checked, idx));
@@ -1165,11 +1205,17 @@ function renderCategories() {
     card.appendChild(header);
     const preview = document.createElement('div');
     preview.className = 'cat-preview';
+    const _pv = (document.getElementById('promptArea') || { value: '' }).value;
     cat.items.slice(0, 8).forEach(item => {
       const chip = document.createElement('span');
-      chip.className = 'chip';
+      chip.className = 'chip'
+        + (lockedCns.includes(item.cn) ? ' chip-locked' : '')
+        + (_pv.includes(item.cn) ? ' chip-active' : '');
+      chip.dataset.cn = item.cn;
       chip.textContent = item.cn;
-      chip.title = item.en;
+      chip.title = lockedCns.includes(item.cn)
+        ? `${item.en || ''}\n🔒 已锁定，每次随机必出`
+        : (item.en || '');
       chip.onclick = () => addToPrompt(item.cn);
       preview.appendChild(chip);
     });
@@ -1210,6 +1256,7 @@ function renderCategories() {
     grid.appendChild(card);
   });
   document.getElementById('totalItems').textContent = total;
+  if (isMgmt) updateBatchPromptCatSelect();
 }
 
 function toggleMgmtPanel() {
@@ -1260,6 +1307,180 @@ function batchAddCategories() {
   showToast(`✅ 已批量添加 ${added} 个类别`, 'success');
 }
 
+// ============================================================
+// 批量添加提示词（管理面板 · 新类别区域）
+// 目标类别下拉框 + 每行一条「中文，English」
+// ============================================================
+
+function updateBatchPromptCatSelect() {
+  const sel = document.getElementById('batchPromptCatSelect');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '';
+  if (!DATA.length) {
+    const o = document.createElement('option');
+    o.value = '';
+    o.textContent = '（暂无类别）';
+    sel.appendChild(o);
+    return;
+  }
+  DATA.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.name;
+    o.textContent = c.name;
+    sel.appendChild(o);
+  });
+  if (cur && DATA.some(c => c.name === cur)) sel.value = cur;
+}
+
+function batchAddPromptsToCategory() {
+  const sel = document.getElementById('batchPromptCatSelect');
+  const ta = document.getElementById('batchPromptInput');
+  if (!sel || !ta) return;
+  const catName = sel.value;
+  const cat = DATA.find(c => c.name === catName);
+  if (!cat) { showToast('⚠️ 请先添加类别，再选择目标类别', 'error'); return; }
+  const lines = ta.value.split('\n').map(s => s.trim()).filter(Boolean);
+  if (!lines.length) { showToast('⚠️ 请输入提示词，每行一条：中文，English', 'error'); return; }
+  let added = 0, skipped = 0;
+  lines.forEach(line => {
+    const sep = line.includes('，') ? '，' : (line.includes(',') ? ',' : null);
+    let cn, en = '';
+    if (sep) {
+      const parts = line.split(sep);
+      cn = parts[0].trim();
+      en = parts.slice(1).join(sep).trim();
+    } else {
+      cn = line;
+    }
+    if (!cn) return;
+    if (cat.items.some(it => it.cn === cn)) { skipped++; return; }
+    cat.items.push({ cn, en });
+    added++;
+  });
+  ta.value = '';
+  if (!added) { showToast(skipped ? '⚠️ 所有提示词均已存在，未添加' : '⚠️ 未解析到有效提示词', 'error'); return; }
+  saveData();
+  renderCategories();
+  showToast(`✅ 已向「${catName}」批量添加 ${added} 条提示词` + (skipped ? `（跳过重复 ${skipped} 条）` : ''), 'success');
+}
+
+// ============================================================
+// 提示词锁定：锁定的词条每次随机必出（该类别不再随机补抽）
+// ============================================================
+
+function openLockPicker(catIdx) {
+  const cat = DATA[catIdx];
+  if (!cat) return;
+  const existing = document.getElementById('lockModal');
+  if (existing) existing.remove();
+
+  const ov = document.createElement('div');
+  ov.className = 'pm-overlay';
+  ov.id = 'lockModal';
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+
+  const pn = document.createElement('div');
+  pn.className = 'pm-panel';
+  pn.style.maxWidth = '760px';
+
+  const hd = document.createElement('div');
+  hd.className = 'pm-header';
+  hd.innerHTML = `<h3>🔒 锁定提示词 · ${escapeHtml(cat.name)}</h3>`;
+  const cb = document.createElement('button');
+  cb.textContent = '✕ 关闭';
+  cb.style.cssText = 'background:var(--surface2);border:1px solid var(--border);color:var(--text2);padding:3px 12px;border-radius:5px;cursor:pointer;font-size:12px;';
+  cb.onclick = () => ov.remove();
+  hd.appendChild(cb);
+  pn.appendChild(hd);
+
+  const bd = document.createElement('div');
+  bd.className = 'pm-body';
+  bd.style.padding = '12px 18px 4px';
+
+  const info = document.createElement('div');
+  info.style.cssText = 'font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.6;';
+  info.textContent = '勾选要锁定的提示词：锁定的词条每次随机都会出现（该类别不再随机抽取其他词条），已锁定词条在卡片上以 🔒 标出。';
+  bd.appendChild(info);
+
+  const search = document.createElement('input');
+  search.className = 'pm-search';
+  search.style.marginBottom = '8px';
+  search.placeholder = '🔍 搜索提示词...';
+  bd.appendChild(search);
+
+  const list = document.createElement('div');
+  list.className = 'lock-picker-list';
+  bd.appendChild(list);
+
+  const lockedSet = new Set(promptsLocked[cat.name] || []);
+  const cbs = [];
+  function renderList(filter) {
+    list.innerHTML = '';
+    cbs.length = 0;
+    const items = filter
+      ? cat.items.filter(i => i.cn.toLowerCase().includes(filter) || (i.en || '').toLowerCase().includes(filter))
+      : cat.items;
+    if (!items.length) {
+      const e = document.createElement('div');
+      e.className = 'pm-empty';
+      e.style.padding = '14px';
+      e.textContent = filter ? '无匹配结果' : '该类别暂无提示词';
+      list.appendChild(e);
+      return;
+    }
+    items.forEach(item => {
+      const lb = document.createElement('label');
+      lb.className = 'uid-check-item';
+      lb.style.minWidth = '0';
+      const c = document.createElement('input');
+      c.type = 'checkbox';
+      c.checked = lockedSet.has(item.cn);
+      c.style.flexShrink = '0';
+      const txt = document.createElement('span');
+      txt.textContent = item.cn + (item.en ? '　' + item.en : '');
+      txt.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;';
+      txt.title = item.cn + (item.en ? '　' + item.en : '');
+      lb.appendChild(c);
+      lb.appendChild(txt);
+      list.appendChild(lb);
+      cbs.push({ cb: c, cn: item.cn });
+    });
+  }
+  search.oninput = () => renderList(search.value.trim().toLowerCase());
+  renderList('');
+
+  const ft = document.createElement('div');
+  ft.className = 'uid-footer';
+  const clrBtn = document.createElement('button');
+  clrBtn.textContent = '🔓 解除全部';
+  clrBtn.onclick = () => { cbs.forEach(x => { x.cb.checked = false; }); };
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = '取消';
+  cancelBtn.onclick = () => ov.remove();
+  const okBtn = document.createElement('button');
+  okBtn.className = 'uid-btn-ok';
+  okBtn.textContent = '保存锁定';
+  okBtn.onclick = () => {
+    const sel = cbs.filter(x => x.cb.checked).map(x => x.cn);
+    if (sel.length) promptsLocked[cat.name] = sel;
+    else delete promptsLocked[cat.name];
+    saveData();
+    renderCategories();
+    ov.remove();
+    showToast(sel.length ? `🔒 已锁定 ${sel.length} 条提示词，每次随机必出` : '🔓 已解除全部锁定', 'success');
+  };
+  ft.appendChild(clrBtn);
+  ft.appendChild(cancelBtn);
+  ft.appendChild(okBtn);
+  bd.appendChild(ft);
+
+  pn.appendChild(bd);
+  ov.appendChild(pn);
+  document.body.appendChild(ov);
+  setTimeout(() => search.focus(), 100);
+}
+
 async function deleteCategory(idx) {
   const cat = DATA[idx];
   if (!cat) return;
@@ -1268,17 +1489,20 @@ async function deleteCategory(idx) {
   const snapshot = {
     cat, idx,
     enabled: promptsEnabled[cat.name],
-    chance: promptsChance[cat.name]
+    chance: promptsChance[cat.name],
+    locked: promptsLocked[cat.name]
   };
   DATA.splice(idx, 1);
   delete promptsEnabled[cat.name];
   delete promptsChance[cat.name];
+  delete promptsLocked[cat.name];
   saveData();
   renderCategories();
   pushUndo(`删除类别「${cat.name}」`, () => {
     DATA.splice(Math.min(snapshot.idx, DATA.length), 0, snapshot.cat);
     if (snapshot.enabled !== undefined) promptsEnabled[snapshot.cat.name] = snapshot.enabled;
     if (snapshot.chance !== undefined) promptsChance[snapshot.cat.name] = snapshot.chance;
+    if (snapshot.locked !== undefined) promptsLocked[snapshot.cat.name] = snapshot.locked;
     saveData();
     renderCategories();
   });
@@ -2070,6 +2294,7 @@ async function aiPolish() {
       if (!polCn && !polEn) document.getElementById('promptArea').value = reply;
     }
     markEnStale(false);
+    refreshChipHighlights();
     showToast('✅ AI 润色完成', 'success');
   } catch (e) {
     showToast('❌ AI 润色失败: ' + e.message, 'error');
@@ -3148,7 +3373,7 @@ function openComfySettings() {
 // ============================================================
 
 const BACKUP_GROUPS = {
-  prompts: { keys: ['prompts_data','prompts_data_enabled','prompts_chance','identity_regions','identity_genders','identity_age','identity_age_random','identity_region_random','identity_gender_random','identity_enabled','enrich_groups','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'], name: '提示词与类别' },
+  prompts: { keys: ['prompts_data','prompts_data_enabled','prompts_chance','prompts_locked','identity_regions','identity_genders','identity_age','identity_age_random','identity_region_random','identity_gender_random','identity_enabled','enrich_groups','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'], name: '提示词与类别' },
   ai: { keys: ['ai_settings','ai_preset','ai_history'], name: 'AI 润色设置' },
   comfy: { keys: ['comfy_settings','comfy_workflows','comfy_gallery'], name: 'ComfyUI 设置' },
   server_config: { keys: ['port','host','comfy_url','html_file'], name: '服务配置', server: true }
@@ -3299,6 +3524,8 @@ async function init() {
   const savedData = storage.get('prompts_data');
   const savedEnabled = storage.get('prompts_data_enabled');
   promptsChance = storage.get('prompts_chance') || {};
+  promptsLocked = storage.get('prompts_locked') || {};
+  if (!promptsLocked || typeof promptsLocked !== 'object' || Array.isArray(promptsLocked)) promptsLocked = {};
   if (savedData) {
     DATA = savedData;
   } else {
@@ -3324,9 +3551,9 @@ async function init() {
   renderIdentityBar();
   renderComfyGallery();
   resizePromptAreas();
-  // 手动输入中文（isTrusted=true 的真实键盘输入）后，英文框标记为「可能已过期」
+  // 手动输入中文（isTrusted=true 的真实键盘输入）后，英文框标记为「可能已过期」，并同步词条高亮
   const cnTa = document.getElementById('promptArea');
-  if (cnTa) cnTa.addEventListener('input', (e) => { if (e.isTrusted) markEnStale(true); });
+  if (cnTa) cnTa.addEventListener('input', (e) => { if (e.isTrusted) { markEnStale(true); refreshChipHighlights(); } });
   setTimeout(() => checkComfyConnection(), 500);
 }
 

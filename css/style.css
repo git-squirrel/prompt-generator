@@ -686,6 +686,37 @@ h1 { display: none; }
   color: var(--text2); font-size: 11.5px; margin-top: 14px;
 }
 
+/* === 提示词锁定 === */
+.btn-lock {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: transparent; border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); color: var(--text2);
+  cursor: pointer; padding: 2px 6px; font-size: 10px; line-height: 1.4;
+  font-family: inherit; transition: all .18s ease; flex-shrink: 0;
+}
+.btn-lock .icon { width: 11px; height: 11px; }
+.btn-lock:hover { color: var(--orange); border-color: var(--orange); }
+.btn-lock.locked { color: var(--orange); border-color: var(--orange); background: var(--orange-soft); font-weight: 700; }
+.lock-count {
+  font-size: 9px; font-weight: 700; line-height: 1;
+  background: var(--orange); color: #fff;
+  border-radius: var(--radius-sm); padding: 1px 5px;
+}
+.cat-card.cat-locked { border-color: rgba(245, 158, 11, .55); box-shadow: 0 0 0 1px rgba(245, 158, 11, .18); }
+.chip.chip-locked {
+  border-color: var(--orange); color: var(--orange);
+  background: var(--orange-soft); font-weight: 600;
+}
+.chip.chip-locked:hover { background: var(--orange); color: #fff; }
+.chip.chip-locked::before { content: '🔒 '; font-size: 9px; }
+/* 已填入提示词框的词条 chip 高亮 */
+.chip.chip-active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.chip.chip-active.chip-locked { background: var(--accent); border-color: var(--accent); color: #fff; }
+.lock-picker-list {
+  max-height: 320px; overflow-y: auto; padding: 2px 0 4px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 5px;
+}
+
 /* === Scrollbar === */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }

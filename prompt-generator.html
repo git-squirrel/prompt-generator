@@ -38,6 +38,7 @@
   <symbol id="icon-user" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2"/><path d="M15 10h3M15 14h3M6 16.5c.5-1.5 1.8-2.5 3-2.5s2.5 1 3 2.5"/></symbol>
   <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
   <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></symbol>
+  <symbol id="icon-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></symbol>
 </svg>
 
 <div class="container">
@@ -164,7 +165,7 @@
   <!-- Categories -->
   <div class="cat-grid" id="catGrid"></div>
   <div class="footer-info" id="footerInfo">
-    <span>共 <span id="totalItems">0</span> 条提示词 · 开启的类别参与随机选择</span>
+    <span>共 <span id="totalItems">0</span> 条提示词 · 开启的类别参与随机选择 · 🔒 锁定的提示词每次必出</span>
     <span style="flex:1;"></span>
     <button class="btn btn-mgmt" onclick="toggleMgmtPanel()" style="display:inline-flex;align-items:center;gap:5px;background:var(--surface);color:var(--text2);border:1px solid var(--border-strong);font-size:11px;padding:5px 12px;border-radius:999px;cursor:pointer;font-family:inherit;"><svg class="icon" style="width:12px;height:12px;"><use href="#icon-settings"/></svg> 管理类别与提示词</button>
   </div>
@@ -174,8 +175,18 @@
       <button class="btn btn-sm btn-add" onclick="addCategory()">添加类别</button>
     </div>
     <div class="mgmt-row" style="align-items:flex-start">
-      <textarea id="batchCatInput" class="mgmt-textarea" rows="2" placeholder="批量添加：每行一个类别名称"></textarea>
+      <textarea id="batchCatInput" class="mgmt-textarea" rows="2" placeholder="批量添加类别：每行一个类别名称"></textarea>
       <button class="btn btn-sm btn-add" onclick="batchAddCategories()" style="margin-top:0">批量添加</button>
+    </div>
+    <div class="mgmt-row" style="align-items:flex-start">
+      <select id="batchPromptCatSelect" class="mgmt-input" style="flex:0 0 130px;min-width:0;cursor:pointer;" title="选择提示词要添加到的目标类别"></select>
+      <textarea id="batchPromptInput" class="mgmt-textarea" rows="2" placeholder="批量添加（每行一条：中文，English）&#10;示例：&#10;卧室，bedroom&#10;白色连衣裙，white dress"></textarea>
+      <button class="btn btn-sm btn-add" onclick="batchAddPromptsToCategory()" style="margin-top:0">批量添加提示词</button>
+    </div>
+    <div style="font-size:10px;color:var(--text2);margin:-3px 0 8px;line-height:1.7;">
+      💡 提示词可以让 AI 帮你生成，给 AI 的要求示例：<br>
+      「请生成 20 条〔类别名〕类提示词，每行一条，格式为：<b>中文，English</b>。中文 2~10 个字；英文用简洁的绘画关键词，同一含义有多个写法时用 / 分隔。不要编号、不要任何解释说明，直接输出列表。」<br>
+      把 AI 的回复整体复制粘贴到上面的输入框，点「批量添加提示词」即可（会自动跳过与当前类别重复的条目）。
     </div>
     <div class="mgmt-row">
       <button class="btn btn-sm btn-add" onclick="semanticSortCategories()" style="font-size:10px;">按语义排序类别</button>
