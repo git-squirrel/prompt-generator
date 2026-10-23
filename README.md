@@ -1,7 +1,7 @@
 # 🎨 提示词生成器
 
 AI 提示词管理与生图一体化工具，支持随机组合、AI 润色、ComfyUI 生图。
-<img width="2100" height="2052" alt="preview-light" src="https://github.com/user-attachments/assets/aa5dc1fe-96cc-4c94-82eb-a4d3f7663de2" />
+<img width="1596" height="695" alt="image" src="https://github.com/user-attachments/assets/0107f20a-aecf-4a32-97a7-0e17a1e65e18" />
 
 ## ✨ 核心亮点
 
@@ -23,6 +23,7 @@ AI 提示词管理与生图一体化工具，支持随机组合、AI 润色、Co
 - **数据持久化**：所有数据自动保存到 JSON 文件，刷新不丢失
 - **一键备份**：提示词、AI 设置、ComfyUI 设置可独立导出/导入
 
+<img width="2551" height="1161" alt="image" src="https://github.com/user-attachments/assets/73cd3565-2203-4466-8b30-02d3a68cc74b" />
 ## 🚀 快速开始
 
 ### 环境要求
@@ -97,6 +98,7 @@ Windows 用户也可直接双击 `start_server.bat`。
 > 适用场景：固定画风/画质词条，每次只随机换服装、场景、动作等其他类别。
 
 #### 📥 批量添加提示词（v3.1 新增）
+<img width="1484" height="1121" alt="image" src="https://github.com/user-attachments/assets/8cf87677-0827-417b-abe5-1f5c266b254c" />
 
 管理面板「新类别」区域新增批量添加提示词入口：
 
@@ -170,7 +172,7 @@ Windows 用户也可直接双击 `start_server.bat`。
 ```
 中文：山水，写实 大师级摄影作品，完美曝光，构图精妙
 ```
-<img width="1382" height="1221" alt="image" src="https://github.com/user-attachments/assets/4f52bfee-ba48-4ac4-846c-56774f8ff27c" />
+
 
 
 ### AI 润色设置
@@ -231,8 +233,9 @@ AI 润色的时间被「隐藏」在 ComfyUI 生图的背后，多组生图的�
 - 实时进度显示（步骤/时间）
 - 生图画廊：查看、下载、删除
 - 查看每张图片的提示词和种子
-<img width="1371" height="439" alt="image" src="https://github.com/user-attachments/assets/6975efd0-ddcc-4388-adeb-19d28110c1b7" />
-<img width="1375" height="662" alt="image" src="https://github.com/user-attachments/assets/052a4a92-6b89-47d5-8133-ac7fdc68e9ee" />
+
+<img width="1488" height="619" alt="image" src="https://github.com/user-attachments/assets/519be297-8414-4191-90e4-c40628d93512" />
+<img width="1357" height="726" alt="image" src="https://github.com/user-attachments/assets/06f7fa5f-7855-4dc5-9598-d793cebc34a0" />
 
 #### 🖼️ 生图画廊（v3.0 重写）
 
