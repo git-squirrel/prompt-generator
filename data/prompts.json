@@ -1,73 +1,6 @@
 {
   "pg_prompts_data": [
     {
-      "name": "场景 (Scenes)",
-      "file": "",
-      "items": [
-        {
-          "cn": "山水",
-          "en": "landscape with mountains and water"
-        },
-        {
-          "cn": "城市",
-          "en": "cityscape"
-        },
-        {
-          "cn": "森林",
-          "en": "forest"
-        },
-        {
-          "cn": "海滩",
-          "en": "beach"
-        },
-        {
-          "cn": "日落",
-          "en": "sunset"
-        },
-        {
-          "cn": "星空",
-          "en": "starry sky"
-        },
-        {
-          "cn": "花园",
-          "en": "garden"
-        },
-        {
-          "cn": "瀑布",
-          "en": "waterfall"
-        },
-        {
-          "cn": "雪景",
-          "en": "snow scene"
-        },
-        {
-          "cn": "湖畔",
-          "en": "lakeside"
-        },
-        {
-          "cn": "草原",
-          "en": "grassland"
-        },
-        {
-          "cn": "沙漠",
-          "en": "desert"
-        },
-        {
-          "cn": "古镇",
-          "en": "ancient town"
-        },
-        {
-          "cn": "樱花道",
-          "en": "cherry blossom path"
-        },
-        {
-          "cn": "海岸线",
-          "en": "coastline"
-        }
-      ],
-      "count": 15
-    },
-    {
       "name": "风格 (Style)",
       "file": "",
       "items": [
@@ -130,73 +63,6 @@
         {
           "cn": "巴洛克",
           "en": "baroque"
-        }
-      ],
-      "count": 15
-    },
-    {
-      "name": "光线 (Lighting)",
-      "file": "",
-      "items": [
-        {
-          "cn": "自然光",
-          "en": "natural lighting"
-        },
-        {
-          "cn": "黄金时刻",
-          "en": "golden hour"
-        },
-        {
-          "cn": "逆光",
-          "en": "backlight"
-        },
-        {
-          "cn": "侧光",
-          "en": "side lighting"
-        },
-        {
-          "cn": "暖光",
-          "en": "warm lighting"
-        },
-        {
-          "cn": "冷光",
-          "en": "cool lighting"
-        },
-        {
-          "cn": "霓虹光",
-          "en": "neon lighting"
-        },
-        {
-          "cn": "烛光",
-          "en": "candlelight"
-        },
-        {
-          "cn": "月光",
-          "en": "moonlight"
-        },
-        {
-          "cn": "晨光",
-          "en": "morning light"
-        },
-        {
-          "cn": "聚光灯",
-          "en": "spotlight"
-        },
-        {
-          "cn": "柔光",
-          "en": "soft lighting"
-        },
-        {
-          "cn": "硬光",
-          "en": "hard lighting"
-        },
-        {
-          "cn": "渐变光",
-          "en": "gradient lighting"
-        },
-        {
-          "cn": "丁达尔效应",
-          "en": "Tyndall effect"
         }
       ],
       "count": 15
@@ -326,6 +192,140 @@
         }
       ],
       "count": 13
+    },
+    {
+      "name": "场景 (Scenes)",
+      "file": "",
+      "items": [
+        {
+          "cn": "山水",
+          "en": "landscape with mountains and water"
+        },
+        {
+          "cn": "城市",
+          "en": "cityscape"
+        },
+        {
+          "cn": "森林",
+          "en": "forest"
+        },
+        {
+          "cn": "海滩",
+          "en": "beach"
+        },
+        {
+          "cn": "日落",
+          "en": "sunset"
+        },
+        {
+          "cn": "星空",
+          "en": "starry sky"
+        },
+        {
+          "cn": "花园",
+          "en": "garden"
+        },
+        {
+          "cn": "瀑布",
+          "en": "waterfall"
+        },
+        {
+          "cn": "雪景",
+          "en": "snow scene"
+        },
+        {
+          "cn": "湖畔",
+          "en": "lakeside"
+        },
+        {
+          "cn": "草原",
+          "en": "grassland"
+        },
+        {
+          "cn": "沙漠",
+          "en": "desert"
+        },
+        {
+          "cn": "古镇",
+          "en": "ancient town"
+        },
+        {
+          "cn": "樱花道",
+          "en": "cherry blossom path"
+        },
+        {
+          "cn": "海岸线",
+          "en": "coastline"
+        }
+      ],
+      "count": 15
+    },
+    {
+      "name": "光线 (Lighting)",
+      "file": "",
+      "items": [
+        {
+          "cn": "自然光",
+          "en": "natural lighting"
+        },
+        {
+          "cn": "黄金时刻",
+          "en": "golden hour"
+        },
+        {
+          "cn": "逆光",
+          "en": "backlight"
+        },
+        {
+          "cn": "侧光",
+          "en": "side lighting"
+        },
+        {
+          "cn": "暖光",
+          "en": "warm lighting"
+        },
+        {
+          "cn": "冷光",
+          "en": "cool lighting"
+        },
+        {
+          "cn": "霓虹光",
+          "en": "neon lighting"
+        },
+        {
+          "cn": "烛光",
+          "en": "candlelight"
+        },
+        {
+          "cn": "月光",
+          "en": "moonlight"
+        },
+        {
+          "cn": "晨光",
+          "en": "morning light"
+        },
+        {
+          "cn": "聚光灯",
+          "en": "spotlight"
+        },
+        {
+          "cn": "柔光",
+          "en": "soft lighting"
+        },
+        {
+          "cn": "硬光",
+          "en": "hard lighting"
+        },
+        {
+          "cn": "渐变光",
+          "en": "gradient lighting"
+        },
+        {
+          "cn": "丁达尔效应",
+          "en": "Tyndall effect"
+        }
+      ],
+      "count": 15
     }
   ],
   "pg_prompts_data_enabled": {
@@ -337,6 +337,32 @@
   },
   "pg_prompts_chance": {},
   "pg_prompts_locked": {},
+  "pg_identity_regions": [
+    "中国",
+    "韩国",
+    "日本",
+    "欧美"
+  ],
+  "pg_identity_genders": [
+    "女",
+    "男"
+  ],
+  "identity_en": {
+    "中国": "Chinese",
+    "韩国": "Korean",
+    "日本": "Japanese",
+    "欧美": "Western",
+    "女": "Female",
+    "男": "Male"
+  },
+  "pg_identity_age": {
+    "min": 22,
+    "max": 38
+  },
+  "pg_identity_age_random": true,
+  "pg_identity_region_random": true,
+  "pg_identity_gender_random": false,
+  "pg_identity_enabled": false,
   "pg_enrich_groups": [
     {
       "id": "enrich",

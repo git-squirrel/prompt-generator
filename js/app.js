@@ -18,6 +18,7 @@ let promptsEnabled = {};
 let promptsChance = {};   // 类别名 -> 出现概率(0-100)，缺省 100
 let promptsLocked = {};   // 类别名 -> [cn,...] 锁定的提示词，每次随机必出（该类别不再随机补抽）
 let DATA = null;
+let _enManual = false;    // 英文框是否被手动编辑过（用于中英对齐提示）
 
 // ============================================================
 // Storage key mapping: shortName -> serverKey
@@ -54,7 +55,7 @@ function serverKey(shortName) {
 }
 
 const SERVER_KEYS = {
-  prompts: ['prompts_data','prompts_data_enabled','prompts_chance','prompts_locked','identity_regions','identity_genders','identity_age','identity_age_random','identity_region_random','identity_gender_random','identity_enabled','enrich_groups','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'],
+  prompts: ['prompts_data','prompts_data_enabled','prompts_chance','prompts_locked','identity_regions','identity_genders','identity_en','identity_age','identity_age_random','identity_region_random','identity_gender_random','identity_enabled','enrich_groups','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'],
   ai: ['ai_settings','ai_preset','ai_history'],
   comfy: ['comfy_settings','comfy_workflows','comfy_gallery']
 };
@@ -71,6 +72,9 @@ function escapeHtml(str) {
 }
 
 function autoResizeTextarea(el) {
+  if (!el) return;
+  // 主编辑区高度由布局撑满，交给 CSS；其余小输入框仍按内容自适应
+  if (el.id === 'promptArea' || el.id === 'promptEnArea') return;
   el.style.height = 'auto';
   el.style.height = Math.max(el.scrollHeight, parseInt(el.dataset.minHeight || '60')) + 'px';
 }
@@ -337,9 +341,20 @@ function updateIdentityPreview() {
   if (ageRandomToggle) identityAgeRandom = ageRandomToggle.checked;
   if (regionRandomToggle) identityRegionRandom = regionRandomToggle.checked;
   if (genderRandomToggle) identityGenderRandom = genderRandomToggle.checked;
-  if (!identityEnabled) { preview.textContent = '身份已关闭'; return; }
+  const mgmtPreview = document.getElementById('mgmtIdentityPreview');
+  if (!identityEnabled) {
+    preview.textContent = '已关闭';
+    if (mgmtPreview) mgmtPreview.textContent = '身份已关闭（不添加年龄 / 地区 / 性别）';
+    const meta = document.getElementById('identityMeta');
+    if (meta) meta.textContent = '已关闭';
+    return;
+  }
   rollIdentity();   // 预览每次重新抽，保证中英文一致
-  preview.textContent = getIdentityPrefix();
+  preview.textContent = '已打开';
+  const prefix = getIdentityPrefix();
+  if (mgmtPreview) mgmtPreview.textContent = prefix;
+  const meta = document.getElementById('identityMeta');
+  if (meta) meta.textContent = prefix;
 }
 
 // ============================================================
@@ -353,6 +368,11 @@ function loadIdentitySettings() {
   identityAgeRandom = storage.getBool('identity_age_random');
   identityRegionRandom = storage.getBool('identity_region_random');
   identityGenderRandom = storage.getBool('identity_gender_random');
+  // 英文映射：服务器数据（loadDataConstants 已写入 IDENTITY_EN）优先，本地缓存合并补充
+  const savedEn = storage.get('identity_en');
+  if (savedEn && typeof savedEn === 'object' && !Array.isArray(savedEn)) {
+    IDENTITY_EN = Object.assign({}, IDENTITY_EN, savedEn);
+  }
   const _ieRaw = storage.getRaw('identity_enabled');
   identityEnabled = _ieRaw === null ? true : _ieRaw === 'true';
 }
@@ -370,7 +390,15 @@ function saveIdentitySettings() {
 
   storage.set('identity_regions', identityRegions);
   storage.set('identity_genders', identityGenders);
+  storage.set('identity_en', IDENTITY_EN);
   storage.set('identity_age', identityAge);
+  // 记住当前选中的值（非随机模式下），刷新后保持
+  const _rs = document.getElementById('regionSelect');
+  const _gs = document.getElementById('genderSelect');
+  const _as = document.getElementById('ageSlider');
+  if (_rs && _gs && _as) {
+    storage.set('identity_selected', { region: _rs.value, gender: _gs.value, age: _as.value });
+  }
   storage.setBool('identity_age_random', identityAgeRandom);
   storage.setBool('identity_region_random', identityRegionRandom);
   storage.setBool('identity_gender_random', identityGenderRandom);
@@ -432,6 +460,16 @@ function renderIdentityBar() {
     if (val < ageSlider.min) ageSlider.value = ageSlider.min;
     if (val > ageSlider.max) ageSlider.value = ageSlider.max;
   }
+  // 恢复上次选中的地区 / 性别 / 年龄（非随机模式下生效）
+  const _sel = storage.get('identity_selected');
+  if (_sel && typeof _sel === 'object') {
+    if (regionSel && _sel.region && identityRegions.includes(_sel.region)) regionSel.value = _sel.region;
+    if (genderSel && _sel.gender && identityGenders.includes(_sel.gender)) genderSel.value = _sel.gender;
+    if (ageSlider && _sel.age) {
+      const a = parseInt(_sel.age, 10);
+      if (a >= ageSlider.min && a <= ageSlider.max) ageSlider.value = a;
+    }
+  }
   if (ageDisplay) ageDisplay.textContent = ageSlider ? ageSlider.value : '';
   if (ageRandomToggle) ageRandomToggle.checked = identityAgeRandom;
   if (regionRandomToggle) regionRandomToggle.checked = identityRegionRandom;
@@ -440,6 +478,7 @@ function renderIdentityBar() {
   if (masterToggle) masterToggle.checked = identityEnabled;
   const bar = document.getElementById('identityBar');
   if (bar) bar.classList.toggle('identity-off', !identityEnabled);
+  document.querySelectorAll('.identity-fields').forEach(el => el.classList.toggle('disabled', !identityEnabled));
   updateIdentityPreview();
 }
 
@@ -451,12 +490,12 @@ function renderIdentityManagement() {
 
   if (regionList) {
     regionList.innerHTML = identityRegions.map((r, i) =>
-      `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:11px;">${escapeHtml(r)}<button onclick="deleteRegion(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:0;line-height:1;">✕</button></span>`
+      `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:11px;">${escapeHtml(r)}${IDENTITY_EN[r] ? `<span style="color:var(--text3);font-size:10px;">${escapeHtml(IDENTITY_EN[r])}</span>` : ''}<button onclick="deleteRegion(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:0;line-height:1;">✕</button></span>`
     ).join('');
   }
   if (genderList) {
     genderList.innerHTML = identityGenders.map((g, i) =>
-      `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:11px;">${escapeHtml(g)}<button onclick="deleteGender(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:0;line-height:1;">✕</button></span>`
+      `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:11px;">${escapeHtml(g)}${IDENTITY_EN[g] ? `<span style="color:var(--text3);font-size:10px;">${escapeHtml(IDENTITY_EN[g])}</span>` : ''}<button onclick="deleteGender(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:0;line-height:1;">✕</button></span>`
     ).join('');
   }
   if (ageMinInput) ageMinInput.value = identityAge.min || 18;
@@ -465,15 +504,19 @@ function renderIdentityManagement() {
 
 function addRegion() {
   const input = document.getElementById('newRegionInput');
+  const enInput = document.getElementById('newRegionEnInput');
   const name = input.value.trim();
   if (!name) { showToast('⚠️ 请输入地区名称', 'error'); return; }
   if (identityRegions.includes(name)) { showToast('⚠️ 地区已存在', 'error'); return; }
+  const en = enInput ? enInput.value.trim() : '';
+  if (en) IDENTITY_EN[name] = en;
   identityRegions.push(name);
   input.value = '';
+  if (enInput) enInput.value = '';
   saveIdentitySettings();
   renderIdentityBar();
   renderIdentityManagement();
-  showToast(`✅ 已添加地区「${name}」`, 'success');
+  showToast(`✅ 已添加地区「${name}」` + (en ? `（英文：${en}）` : '（未填英文，英文提示词将显示中文原名）'), 'success');
 }
 
 async function deleteRegion(idx) {
@@ -489,15 +532,19 @@ async function deleteRegion(idx) {
 
 function addGender() {
   const input = document.getElementById('newGenderInput');
+  const enInput = document.getElementById('newGenderEnInput');
   const name = input.value.trim();
   if (!name) { showToast('⚠️ 请输入性别', 'error'); return; }
   if (identityGenders.includes(name)) { showToast('⚠️ 性别已存在', 'error'); return; }
+  const en = enInput ? enInput.value.trim() : '';
+  if (en) IDENTITY_EN[name] = en;
   identityGenders.push(name);
   input.value = '';
+  if (enInput) enInput.value = '';
   saveIdentitySettings();
   renderIdentityBar();
   renderIdentityManagement();
-  showToast(`✅ 已添加性别「${name}」`, 'success');
+  showToast(`✅ 已添加性别「${name}」` + (en ? `（英文：${en}）` : '（未填英文，英文提示词将显示中文原名）'), 'success');
 }
 
 async function deleteGender(idx) {
@@ -809,7 +856,7 @@ function markEnStale(stale) {
   const tea = document.getElementById('promptEnArea');
   if (!tea) return;
   tea.classList.toggle('en-stale', !!stale);
-  tea.title = stale ? '中文已被手动修改，英文可能已过期（点「优化」或重新「随机」可同步）' : '';
+  tea.title = stale ? '中文已手动修改，英文可能已过期（可直接编辑英文，或点「随机组合 / 模板优化」重新同步）' : '';
 }
 
 function syncEn(cnText, usedItems) {
@@ -827,6 +874,9 @@ function syncEn(cnText, usedItems) {
     }).join(', ');
   }
   document.getElementById('promptEnArea').value = en;
+  _enManual = false;
+  const es = document.getElementById('enState');
+  if (es) es.textContent = '默认由中文自动映射';
   markEnStale(false);
 }
 
@@ -898,6 +948,9 @@ function optimizePrompt() {
 
   document.getElementById('promptArea').value = optimizedCn;
   document.getElementById('promptEnArea').value = optimizedEn;
+  _enManual = false;
+  const _es = document.getElementById('enState');
+  if (_es) _es.textContent = '模板优化结果 · 可继续编辑';
   markEnStale(false);
   resizePromptAreas();
   refreshChipHighlights();
@@ -916,7 +969,10 @@ function copyPrompt(id) {
 function clearPrompt() {
   document.getElementById('promptArea').value = '';
   document.getElementById('promptEnArea').value = '';
+  _enManual = false;
   markEnStale(false);
+  const es = document.getElementById('enState');
+  if (es) es.textContent = '可手动编辑 · 默认由中文自动映射';
   resizePromptAreas();
   refreshChipHighlights();
 }
@@ -930,6 +986,7 @@ function refreshChipHighlights() {
     const cn = ch.dataset.cn || ch.textContent;
     ch.classList.toggle('chip-active', !!cn && v.includes(cn));
   });
+  updatePromptStats();
 }
 
 function addToPrompt(text) {
@@ -1176,7 +1233,13 @@ function renderCategories() {
     const header = document.createElement('div');
     header.className = 'cat-header';
     const checked = promptsEnabled[cat.name] !== false ? 'checked' : '';
-    let headerHtml = `<div><span class="cat-name">${escapeHtml(cat.name)}</span><span class="cat-count">${cat.items.length}</span></div>`;
+    // 类别名可能形如「风格 (Style)」——拆成中文名 + 英文小标，界面更紧凑
+    const _m = String(cat.name).match(/^(.+?)\s*[(（]([^)）]+)[)）]\s*$/);
+    const dispName = _m ? _m[1].trim() : cat.name;
+    const dispEn = _m ? _m[2].trim().toUpperCase() : '';
+    let headerHtml = `<div><span class="cat-name">${escapeHtml(dispName)}</span>` +
+      (dispEn ? `<span class="cat-en">${escapeHtml(dispEn)}</span>` : '') +
+      `<span class="cat-count">${cat.items.length}</span></div>`;
     if (isMgmt) {
       // 管理模式：上移/下移（随机组合按类别顺序拼接）+ 删除
       headerHtml += `<span style="display:inline-flex;align-items:center;gap:2px;">` +
@@ -1206,7 +1269,7 @@ function renderCategories() {
     const preview = document.createElement('div');
     preview.className = 'cat-preview';
     const _pv = (document.getElementById('promptArea') || { value: '' }).value;
-    cat.items.slice(0, 8).forEach(item => {
+    cat.items.slice(0, 7).forEach(item => {
       const chip = document.createElement('span');
       chip.className = 'chip'
         + (lockedCns.includes(item.cn) ? ' chip-locked' : '')
@@ -1219,10 +1282,10 @@ function renderCategories() {
       chip.onclick = () => addToPrompt(item.cn);
       preview.appendChild(chip);
     });
-    if (cat.items.length > 8) {
+    if (cat.items.length > 7) {
       const more = document.createElement('span');
       more.className = 'chip';
-      more.textContent = `+${cat.items.length - 8}`;
+      more.textContent = `+${cat.items.length - 7}`;
       more.style.opacity = '.5';
       more.onclick = () => showAllItems(idx);
       preview.appendChild(more);
@@ -1256,16 +1319,38 @@ function renderCategories() {
     grid.appendChild(card);
   });
   document.getElementById('totalItems').textContent = total;
-  if (isMgmt) updateBatchPromptCatSelect();
+  updateLockSummary();
+  const cs = document.getElementById('catSummary');
+  if (cs) cs.textContent = `${DATA.length} 类 · ${total} 条`;
+  const ms = document.getElementById('mgmtCatSummary');
+  if (ms) ms.textContent = `${DATA.length} 类 · ${total} 条`;
+  const searchEl = document.getElementById('catSearch');
+  applyCatSearch(searchEl ? searchEl.value : '');
 }
 
 function toggleMgmtPanel() {
   const panel = document.getElementById('mgmtPanel');
-  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-  renderCategories();
-  if (panel.style.display === 'block') {
+  const overlay = document.getElementById('mgmtOverlay');
+  const grid = document.getElementById('catGrid');
+  const host = document.getElementById('mgmtCatHost');
+  const leftHost = document.getElementById('leftCats');
+  if (!panel) return;
+  const willOpen = panel.style.display === 'none' || !panel.style.display;
+  if (willOpen) {
+    panel.style.display = 'block';
+    if (overlay) overlay.style.display = 'flex';
+    if (host && grid) host.appendChild(grid);
+    renderCategories();
     renderIdentityManagement();
     renderEnrichManagement();
+    const mp = document.getElementById('mgmtIdentityPreview');
+    const ip = document.getElementById('identityPreview');
+    if (mp && ip) mp.textContent = ip.textContent;
+  } else {
+    panel.style.display = 'none';
+    if (overlay) overlay.style.display = 'none';
+    if (leftHost && grid) leftHost.appendChild(grid);
+    renderCategories();
   }
 }
 
@@ -1286,83 +1371,6 @@ function addCategory() {
   saveData();
   renderCategories();
   showToast(`✅ 已添加类别「${name}」`, 'success');
-}
-
-function batchAddCategories() {
-  const ta = document.getElementById('batchCatInput');
-  const lines = ta.value.split('\n').map(s => s.trim()).filter(Boolean);
-  if (lines.length === 0) { showToast('⚠️ 请输入类别名称，每行一个', 'error'); return; }
-  let added = 0;
-  lines.forEach(name => {
-    if (!DATA.some(c => c.name === name)) {
-      DATA.push({ name, file: '', items: [], count: 0 });
-      promptsEnabled[name] = true;
-      added++;
-    }
-  });
-  ta.value = '';
-  if (added === 0) { showToast('⚠️ 所有类别已存在', 'error'); return; }
-  saveData();
-  renderCategories();
-  showToast(`✅ 已批量添加 ${added} 个类别`, 'success');
-}
-
-// ============================================================
-// 批量添加提示词（管理面板 · 新类别区域）
-// 目标类别下拉框 + 每行一条「中文，English」
-// ============================================================
-
-function updateBatchPromptCatSelect() {
-  const sel = document.getElementById('batchPromptCatSelect');
-  if (!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = '';
-  if (!DATA.length) {
-    const o = document.createElement('option');
-    o.value = '';
-    o.textContent = '（暂无类别）';
-    sel.appendChild(o);
-    return;
-  }
-  DATA.forEach(c => {
-    const o = document.createElement('option');
-    o.value = c.name;
-    o.textContent = c.name;
-    sel.appendChild(o);
-  });
-  if (cur && DATA.some(c => c.name === cur)) sel.value = cur;
-}
-
-function batchAddPromptsToCategory() {
-  const sel = document.getElementById('batchPromptCatSelect');
-  const ta = document.getElementById('batchPromptInput');
-  if (!sel || !ta) return;
-  const catName = sel.value;
-  const cat = DATA.find(c => c.name === catName);
-  if (!cat) { showToast('⚠️ 请先添加类别，再选择目标类别', 'error'); return; }
-  const lines = ta.value.split('\n').map(s => s.trim()).filter(Boolean);
-  if (!lines.length) { showToast('⚠️ 请输入提示词，每行一条：中文，English', 'error'); return; }
-  let added = 0, skipped = 0;
-  lines.forEach(line => {
-    const sep = line.includes('，') ? '，' : (line.includes(',') ? ',' : null);
-    let cn, en = '';
-    if (sep) {
-      const parts = line.split(sep);
-      cn = parts[0].trim();
-      en = parts.slice(1).join(sep).trim();
-    } else {
-      cn = line;
-    }
-    if (!cn) return;
-    if (cat.items.some(it => it.cn === cn)) { skipped++; return; }
-    cat.items.push({ cn, en });
-    added++;
-  });
-  ta.value = '';
-  if (!added) { showToast(skipped ? '⚠️ 所有提示词均已存在，未添加' : '⚠️ 未解析到有效提示词', 'error'); return; }
-  saveData();
-  renderCategories();
-  showToast(`✅ 已向「${catName}」批量添加 ${added} 条提示词` + (skipped ? `（跳过重复 ${skipped} 条）` : ''), 'success');
 }
 
 // ============================================================
@@ -1666,7 +1674,7 @@ function renderPromptManager(container) {
   batchTa.id = 'pmBatchTa';
   batchTa.className = 'pm-batch';
   batchTa.rows = 3;
-  batchTa.placeholder = '示例：\n卧室，bedroom\n客厅，living room\n厨房，kitchen';
+  batchTa.placeholder = '批量添加（每行一条：中文，English）\n示例：\n卧室，bedroom\n客厅，living room\n厨房，kitchen';
   const batchBtn = document.createElement('button');
   batchBtn.className = 'btn btn-sm btn-add';
   batchBtn.textContent = '批量添加';
@@ -1675,6 +1683,13 @@ function renderPromptManager(container) {
   batchRow.appendChild(batchTa);
   batchRow.appendChild(batchBtn);
   container.appendChild(batchRow);
+
+  // AI 生成提示词的要求说明：复制给任意 AI 即可获得格式正确的列表，整体粘贴到上面即可
+  const aiTip = document.createElement('div');
+  aiTip.style.cssText = 'font-size:10px;color:var(--text2);margin-top:6px;line-height:1.7;';
+  aiTip.innerHTML = '💡 提示词可以让 AI 帮你生成，要求示例：「请生成 20 条〔<b>' + escapeHtml(cat.name) +
+    '</b>〕类提示词，每行一条，格式为：<b>中文，English</b>。中文 2~10 个字；英文用简洁的绘画关键词，同一含义有多个写法时用 / 分隔。不要编号、不要任何解释说明，直接输出列表。」把 AI 的回复整体粘贴到上面即可（自动跳过重复条目）。';
+  container.appendChild(aiTip);
 }
 
 function renderPromptList(container, filter) {
@@ -1837,13 +1852,21 @@ function updateAiStatus() {
   const el = document.getElementById('aiStatus');
   const tog = document.getElementById('aiToggle');
   if (!el || !tog) return;
-  if (!tog.checked) { el.textContent = '已关闭'; el.className = 'ai-indicator'; return; }
-  if (aiSettings && aiSettings.baseUrl && aiSettings.model) {
-    el.textContent = '已配置 ✓';
-    el.className = 'ai-indicator on';
-  } else {
-    el.textContent = '未配置';
+  const meta = document.getElementById('aiMeta');
+  if (!tog.checked) {
+    el.innerHTML = '已关闭';
     el.className = 'ai-indicator';
+    if (meta) meta.textContent = '已关闭';
+    return;
+  }
+  if (aiSettings && aiSettings.baseUrl && aiSettings.model) {
+    el.innerHTML = '<span class="dot green"></span>已配置';
+    el.className = 'ai-indicator on';
+    if (meta) meta.textContent = aiSettings.model;
+  } else {
+    el.innerHTML = '未配置';
+    el.className = 'ai-indicator';
+    if (meta) meta.textContent = '未配置';
   }
 }
 
@@ -1984,6 +2007,7 @@ function openAiSettings() {
     aiSettings.model = mi.value;
     saveAiSettings();
     updateAiStatus();
+    syncPolishLangUI();
     ov.remove();
     showToast('✅ AI 设置已保存', 'success');
   };
@@ -2230,8 +2254,9 @@ async function aiPolish() {
   if (!cn && !en) { showToast('⚠️ 提示词为空', 'error'); return; }
 
   const btn = document.getElementById('aiPolishBtn');
-  const orig = btn.textContent;
-  btn.textContent = '⏳ AI 润色中...';
+  const orig = btn.dataset.label || 'AI 润色';
+  btn.dataset.label = orig;
+  btn.innerHTML = '⏳ AI 润色中...';
   btn.disabled = true;
 
   try {
@@ -2293,13 +2318,16 @@ async function aiPolish() {
       if (polEn) document.getElementById('promptEnArea').value = polEn;
       if (!polCn && !polEn) document.getElementById('promptArea').value = reply;
     }
+    _enManual = false;
+    const _es = document.getElementById('enState');
+    if (_es) _es.textContent = 'AI 润色结果 · 可继续编辑';
     markEnStale(false);
     refreshChipHighlights();
     showToast('✅ AI 润色完成', 'success');
   } catch (e) {
     showToast('❌ AI 润色失败: ' + e.message, 'error');
   } finally {
-    btn.textContent = orig;
+    btn.innerHTML = '<svg class="icon"><use href="#icon-robot"/></svg><span class="btn-label">' + orig + '</span>';
     btn.disabled = false;
   }
 }
@@ -2312,11 +2340,17 @@ let comfySettings = null, comfyWorkflows = [], comfyConnected = false;
 let comfyStopped = false, comfyQueueRunning = false;
 
 function defaultComfySettings() {
-  return { url: 'http://127.0.0.1:8188', language: 'en', randomCount: 1, batchCount: 1, selectedWorkflow: -1, width: 512, height: 512, useProxy: false, autoShutdown: false, shutdownMinutes: 5 };
+  return {
+    url: 'http://127.0.0.1:8188', language: 'en', randomCount: 1, batchCount: 1,
+    selectedWorkflow: -1, width: 512, height: 512, useProxy: false,
+    autoShutdown: false, shutdownMinutes: 5,
+    seed: Math.floor(Math.random() * 2147483647) + 1, seedLock: false
+  };
 }
 
 function loadComfySettings() {
-  comfySettings = storage.get('comfy_settings') || defaultComfySettings();
+  comfySettings = Object.assign(defaultComfySettings(), storage.get('comfy_settings') || {});
+  if (!comfySettings.seed) comfySettings.seed = Math.floor(Math.random() * 2147483647) + 1;
 }
 
 function saveComfySettings() {
@@ -2373,8 +2407,26 @@ function saveComfyWorkflows() {
 function updateComfyStatus() {
   const el = document.getElementById('comfyStatus');
   if (!el) return;
-  el.innerHTML = comfyConnected ? '🟢 已连接' : '🔴 未连接';
-  el.className = comfyConnected ? 'ai-indicator on' : 'ai-indicator';
+  el.innerHTML = `<span class="dot ${comfyConnected ? 'green' : 'red'}"></span>${comfyConnected ? 'ComfyUI 已连接' : 'ComfyUI 未连接'}`;
+  el.className = comfyConnected ? 'ai-indicator on' : 'ai-indicator off';
+  const qs = document.getElementById('comfyQueueState');
+  if (qs && !comfyQueueRunning) {
+    setQueueStatus(comfyConnected ? 'ready' : 'disconnected');
+  }
+}
+
+function setQueueStatus(state) {
+  const qs = document.getElementById('comfyQueueState');
+  if (!qs) return;
+  const map = {
+    ready: ['green', '就绪'],
+    running: ['cyan', '生成中'],
+    error: ['red', '出错'],
+    stopped: ['amber', '已中止'],
+    disconnected: ['red', '未连接']
+  };
+  const [cls, text] = map[state] || map.ready;
+  qs.innerHTML = `<span class="dot ${cls}"></span>${text}`;
 }
 
 function getComfyBaseUrl() {
@@ -2455,6 +2507,9 @@ function handleWorkflowUpload(e) {
         comfySettings.selectedWorkflow = comfyWorkflows.length - 1;
         saveComfySettings();
       }
+      updateRightPanel();
+      const cm = document.getElementById('comfyModal');
+      if (cm) openComfySettings();
     } catch (err) {
       showToast('⚠️ 无效的工作流 JSON', 'error');
     }
@@ -2470,6 +2525,7 @@ async function deleteComfyWorkflow(idx) {
   else if (comfySettings.selectedWorkflow > idx) comfySettings.selectedWorkflow--;
   saveComfyWorkflows();
   saveComfySettings();
+  updateRightPanel();
 }
 
 function selectComfyWorkflow(idx) {
@@ -2478,19 +2534,42 @@ function selectComfyWorkflow(idx) {
   autoDetectSize();
 }
 
+function _latentSizeFromWorkflow(wf) {
+  let w = 0, h = 0;
+  if (!wf || typeof wf !== 'object') return { w, h };
+  if (Array.isArray(wf.nodes)) {
+    for (const n of wf.nodes) {
+      if (n && n.type && String(n.type).includes('LatentImage') && n.widgets_values && n.widgets_values.length >= 2) {
+        w = parseInt(n.widgets_values[0], 10) || 0;
+        h = parseInt(n.widgets_values[1], 10) || 0;
+        break;
+      }
+    }
+  } else {
+    const data = wf.prompt || wf;
+    for (const n of Object.values(data)) {
+      if (n && n.class_type && String(n.class_type).includes('LatentImage') && n.inputs) {
+        w = parseInt(n.inputs.width, 10) || 0;
+        h = parseInt(n.inputs.height, 10) || 0;
+        break;
+      }
+    }
+  }
+  return { w, h };
+}
+
 function autoDetectSize() {
   if (comfySettings.selectedWorkflow < 0 || comfySettings.selectedWorkflow >= comfyWorkflows.length) return;
   const wf = comfyWorkflows[comfySettings.selectedWorkflow].data;
-  for (const n of (wf.nodes || [])) {
-    if (n.type === 'EmptyLatentImage' && n.widgets_values && n.widgets_values.length >= 2) {
-      comfySettings.width = n.widgets_values[0];
-      comfySettings.height = n.widgets_values[1];
-      saveComfySettings();
-      const we = document.getElementById('comfyWidth'), he = document.getElementById('comfyHeight');
-      if (we) we.value = comfySettings.width;
-      if (he) he.value = comfySettings.height;
-      break;
-    }
+  const { w, h } = _latentSizeFromWorkflow(wf);
+  if (w && h) {
+    comfySettings.width = w;
+    comfySettings.height = h;
+    saveComfySettings();
+    const we = document.getElementById('comfyWidth'), he = document.getElementById('comfyHeight');
+    if (we) we.value = comfySettings.width;
+    if (he) he.value = comfySettings.height;
+    updateRightPanel();
   }
 }
 
@@ -2537,7 +2616,7 @@ function _convertNodesFormat(wf, text, width, height, seed) {
       }
     });
     if (n.type === 'CLIPTextEncode' && widgets.length > 0 && !inputs.text) inputs.text = text;
-    if (n.type === 'EmptyLatentImage') { if (width) inputs.width = width; if (height) inputs.height = height; }
+    if (n.type && String(n.type).includes('LatentImage')) { if (width) inputs.width = width; if (height) inputs.height = height; }
     if ('seed' in inputs) inputs.seed = seed !== undefined ? seed : Math.floor(Math.random() * 2147483647);
     if ('noise_seed' in inputs) inputs.noise_seed = seed !== undefined ? seed : Math.floor(Math.random() * 2147483647);
     prompt[n.id] = { class_type: n.type, inputs };
@@ -2551,7 +2630,7 @@ function _convertApiFormat(data, text, width, height, seed) {
     if (!n || typeof n !== 'object') return;
     const inputs = JSON.parse(JSON.stringify(n.inputs || {}));
     if (n.class_type === 'CLIPTextEncode' && 'text' in inputs) inputs.text = text;
-    if (n.class_type === 'EmptyLatentImage') { if (width) inputs.width = width; if (height) inputs.height = height; }
+    if (n.class_type && String(n.class_type).includes('LatentImage')) { if (width) inputs.width = width; if (height) inputs.height = height; }
     if ('seed' in inputs) inputs.seed = seed !== undefined ? seed : Math.floor(Math.random() * 2147483647);
     if ('noise_seed' in inputs) inputs.noise_seed = seed !== undefined ? seed : Math.floor(Math.random() * 2147483647);
     prompt[nid] = { class_type: n.class_type, inputs };
@@ -2667,9 +2746,11 @@ function renderComfyGallery() {
   if (count) count.textContent = comfyGallery.length + ' 张';
   if (comfyGallery.length === 0) {
     grid.innerHTML = '';
+    grid.style.display = 'none';
     if (empty) empty.style.display = 'block';
     return;
   }
+  grid.style.display = '';
   if (empty) empty.style.display = 'none';
 
   const cols = _galleryColsForWidth();
@@ -2708,8 +2789,10 @@ if (typeof window !== 'undefined' && !window.__pgGalleryResizeBound) {
 }
 
 let _galleryCapToastAt = 0;
-function addToComfyGallery(imgUrl, badge, prompt, seed) {
-  comfyGallery.unshift({ url: imgUrl, badge: String(badge || ''), ts: Date.now(), prompt: prompt || '', seed: seed || '' });
+function addToComfyGallery(imgUrl, badge, prompt, seed, extra) {
+  const item = { url: imgUrl, badge: String(badge || ''), ts: Date.now(), prompt: prompt || '', seed: seed || '' };
+  if (extra && typeof extra === 'object') Object.assign(item, extra);
+  comfyGallery.unshift(item);
   if (comfyGallery.length > 200) {
     comfyGallery = comfyGallery.slice(0, 200);
     // 上限静默丢弃用户无感知，提示一次（批量生图时节流 30s，避免刷屏）
@@ -2745,12 +2828,55 @@ function openGalleryModal(idx) {
   _currentModalIdx = idx;
   const modal = document.getElementById('imgModal');
   const img = document.getElementById('imgModalImg');
-  const promptEl = document.getElementById('imiPromptText');
-  const seedEl = document.getElementById('imiSeedText');
   if (!modal || !img) return;
   img.src = item.url;
-  if (promptEl) promptEl.textContent = item.prompt || '(无记录)';
-  if (seedEl) seedEl.textContent = item.seed || '(无记录)';
+
+  const total = comfyGallery.length;
+  const badge = (item.badge !== undefined && item.badge !== null && String(item.badge) !== '')
+    ? String(item.badge) : String(idx + 1).padStart(2, '0');
+  _setText('imgModalBadge', '#' + badge);
+  _setText('imgModalTag', '生成');
+  _setText('imgModalSub', `生图画廊 · 第 ${idx + 1} / ${total} 张`);
+  _setText('imgModalStageBadge', '#' + badge + ' · 原图');
+
+  const _cjk = /[\u4e00-\u9fa5]/;
+  const raw = item.prompt || '';
+  const cn = item.promptCn || (_cjk.test(raw) ? raw : '');
+  const en = item.promptEn || (!_cjk.test(raw) ? raw : '');
+  _setText('imiPromptCn', cn || '（无中文记录）');
+  _setText('imiPromptEn', en || '（无英文记录）');
+  _setText('imiSource', item.source || 'ComfyUI 输出');
+  _setText('imiSeedText', item.seed || '—');
+
+  const setSize = () => {
+    const w = img.naturalWidth || item.width || 0;
+    const h = img.naturalHeight || item.height || 0;
+    if (!w || !h) return;
+    _setText('imiSizeText', w + ' × ' + h);
+    _setText('imiSizeOverlay', '原图 ' + w + ' × ' + h);
+  };
+  if (img.complete && img.naturalWidth) setSize();
+  img.onload = setSize;
+  img.onerror = () => {
+    _setText('imiSizeText', '—');
+    _setText('imiSizeOverlay', '图片加载失败');
+  };
+
+  const wfName = item.workflow || (comfyWorkflows[comfySettings.selectedWorkflow] && comfyWorkflows[comfySettings.selectedWorkflow].name) || '—';
+  _setText('imiWorkflowText', wfName);
+  _setText('imiDurationText', item.duration ? Number(item.duration).toFixed(1) + ' s' : '—');
+  _setText('imiTimeText', item.ts ? new Date(item.ts).toLocaleString('zh-CN') : '—');
+  _setText('imiBatchText', (item.group && item.batch) ? `第 ${item.group} 组 · 第 ${item.batch} 张` : '#' + badge);
+
+  let meta = item.meta;
+  if (!meta && comfyWorkflows[comfySettings.selectedWorkflow]) {
+    try { meta = _workflowMeta(comfyWorkflows[comfySettings.selectedWorkflow].data); } catch (e) { meta = null; }
+  }
+  meta = meta || {};
+  _setText('imiSamplerText', meta.sampler || '—');
+  _setText('imiStepsText', (meta.steps || meta.cfg) ? `${meta.steps || '—'} / ${meta.cfg || '—'}` : '—');
+  _setText('imiModelText', meta.model || '—');
+
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
   // 键盘支持：Esc 关闭，←/→ 在同一会话的画廊里翻页（其他对话框都有 Esc，这里原先没有）
@@ -2765,6 +2891,17 @@ function openGalleryModal(idx) {
   };
   document.addEventListener('keydown', _imgModalKeyHandler, true);
 }
+
+function copyModalPrompt() {
+  const item = comfyGallery[_currentModalIdx];
+  const text = item ? (item.promptCn || item.prompt || '') : '';
+  if (!text) { showToast('⚠️ 没有可复制的提示词', 'error'); return; }
+  navigator.clipboard.writeText(text).then(
+    () => showToast('✅ 提示词已复制', 'success'),
+    () => showToast('⚠️ 复制失败', 'error')
+  );
+}
+
 
 function closeImgModal() {
   const modal = document.getElementById('imgModal');
@@ -2834,14 +2971,51 @@ function _updateProgress(status, current, total, elapsed) {
 }
 
 function _hideProgress() {
-  const wrap = document.getElementById('comfyProgressWrap');
-  if (wrap) wrap.style.display = 'none';
+  const fill = document.getElementById('comfyProgressFill');
+  const info = document.getElementById('comfyProgressInfo');
+  if (fill) fill.style.width = '0%';
+  if (info) info.innerHTML = '<span>0/0</span><span>⏱ --:--</span><span class="pp-status">等待中</span>';
 }
 
 function _fmtTime(seconds) {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function _workflowMeta(wf) {
+  const out = { sampler: '', steps: '', cfg: '', model: '' };
+  if (!wf || typeof wf !== 'object') return out;
+  try {
+    if (Array.isArray(wf.nodes)) {
+      wf.nodes.forEach(n => {
+        if (!n) return;
+        const type = n.type || n.class_type || '';
+        const w = n.widgets_values || [];
+        if (type === 'KSampler' || type === 'KSamplerAdvanced') {
+          if (w[2] != null) out.steps = w[2];
+          if (w[3] != null) out.cfg = w[3];
+          if (w[4]) out.sampler = w[4];
+        }
+        if (type === 'CheckpointLoaderSimple' && w[0]) out.model = w[0];
+        if (type === 'UNETLoader' && w[0]) out.model = w[0];
+      });
+    } else {
+      const data = wf.prompt || wf;
+      Object.values(data).forEach(n => {
+        if (!n || !n.class_type) return;
+        const inp = n.inputs || {};
+        if (n.class_type === 'KSampler' || n.class_type === 'KSamplerAdvanced') {
+          if (inp.sampler_name) out.sampler = inp.sampler_name;
+          if (inp.steps != null) out.steps = inp.steps;
+          if (inp.cfg != null) out.cfg = inp.cfg;
+        }
+        if (n.class_type === 'CheckpointLoaderSimple' && inp.ckpt_name) out.model = inp.ckpt_name;
+        if (n.class_type === 'UNETLoader' && inp.unet_name) out.model = inp.unet_name;
+      });
+    }
+  } catch (e) { /* 忽略解析失败 */ }
+  return out;
 }
 
 function _getWorkflowSteps(wf) {
@@ -2999,11 +3173,14 @@ async function startComfyGeneration() {
   const btn = document.getElementById('comfyStartBtn');
   const stopBtn = document.getElementById('comfyStopBtn');
   btn.disabled = true;
-  btn.textContent = '⏳ 生成中...';
-  stopBtn.style.display = 'inline';
+  setStartButton('生成中…');
+  stopBtn.style.display = 'inline-flex';
   comfyStopped = false;
   comfyQueueRunning = true;
+  let genFailed = false;
   const total = comfySettings.randomCount * comfySettings.batchCount;
+  buildGenQueue(total);
+  setQueueStatus('running');
   let completed = 0;
   const startTime = Date.now();
   const steps = _getWorkflowSteps(wf);
@@ -3040,7 +3217,14 @@ async function startComfyGeneration() {
         completed++;
         const elapsed = (Date.now() - startTime) / 1000;
         _updateProgress(`🚀 发送第 ${completed}/${total}`, completed, total, elapsed);
-        const seed = Math.floor(Math.random() * 2147483647) + 1;
+        const seed = comfySettings.seedLock
+          ? (parseInt(comfySettings.seed, 10) || Math.floor(Math.random() * 2147483647) + 1)
+          : Math.floor(Math.random() * 2147483647) + 1;
+        if (!comfySettings.seedLock) {
+          const seedInput = document.getElementById('comfySeed');
+          if (seedInput) seedInput.value = seed;
+        }
+        queueMark(completed, 'run', seed);
         _updateProgress(`🎲 种子 ${seed} (${completed}/${total})`, completed, total, elapsed);
         const pd = workflowToPrompt(wf, finalPrompt, comfySettings.width, comfySettings.height, seed);
         let seedCount = 0;
@@ -3061,11 +3245,26 @@ async function startComfyGeneration() {
         const br = batchResults[b];
         const elapsed = (Date.now() - startTime) / 1000;
         _updateProgress(`🎨 生成中... 0/${steps}步 (${completed - batchResults.length + b + 1}/${total})`, completed, total, elapsed);
+        const _pollStart = Date.now();
         const historyData = await _pollComfyUI(br.result.prompt_id, steps);
+        const _imgDur = (Date.now() - _pollStart) / 1000;
         const imgs = _extractImages(historyData);
         for (const imgUrl of imgs) {
-          addToComfyGallery(imgUrl, completed, br.prompt, br.seed);
+          addToComfyGallery(imgUrl, completed, br.prompt, br.seed, {
+            promptCn: currentPrompt ? currentPrompt.cn : '',
+            promptEn: currentPrompt ? currentPrompt.en : '',
+            workflow: (comfyWorkflows[comfySettings.selectedWorkflow] || {}).name || '',
+            duration: _imgDur,
+            width: comfySettings.width,
+            height: comfySettings.height,
+            group: p + 1,
+            batch: b + 1,
+            source: (document.getElementById('aiToggle') && document.getElementById('aiToggle').checked)
+              ? '模板优化 + AI 润色' : '模板优化',
+            meta: _workflowMeta(wf)
+          });
         }
+        queueMark(completed - batchResults.length + b + 1, 'done', br.seed);
       }
       _updateProgress(`✅ 已完成 ${completed}/${total}`, completed, total, (Date.now() - startTime) / 1000);
 
@@ -3085,15 +3284,23 @@ async function startComfyGeneration() {
       triggerShutdown(secs);
     }
   } catch (e) {
+    genFailed = true;
+    setQueueStatus('error');
     showToast('❌ 生图失败: ' + e.message.slice(0, 150), 'error');
     _updateProgress(`❌ ${e.message.slice(0, 50)}`, completed, total, (Date.now() - startTime) / 1000);
+    _genQueue.forEach(q => { if (q.state === 'run') q.state = 'err'; });
+    renderGenQueue();
   } finally {
     btn.disabled = false;
-    btn.textContent = comfyStopped ? '🔄 重新开始' : '🚀 开始生图';
+    setStartButton(comfyStopped ? '重新开始' : '开始生图');
     stopBtn.style.display = 'none';
     comfyQueueRunning = false;
+    if (genFailed) setQueueStatus('error');
+    else if (comfyStopped) setQueueStatus('stopped');
+    else setQueueStatus(comfyConnected ? 'ready' : 'disconnected');
     if (comfyStopped) _updateProgress('⏹ 已中止', 0, 0, 0);
     else setTimeout(_hideProgress, 6000);
+    updateQueueSummary();
   }
 }
 
@@ -3334,8 +3541,8 @@ function openComfySettings() {
     wrap.appendChild(inp);
     return wrap;
   }
-  rbRow.appendChild(makeNumberInput('comfyRandCnt', '随机提示词数量', comfySettings.randomCount, 1, 50));
-  rbRow.appendChild(makeNumberInput('comfyBatchCnt', '生图批次', comfySettings.batchCount, 1, 20));
+  rbRow.appendChild(makeNumberInput('comfyRandCnt', '随机提示词数量', comfySettings.randomCount, 1, 999999));
+  rbRow.appendChild(makeNumberInput('comfyBatchCnt', '生图批次', comfySettings.batchCount, 1, 999999));
   bd.appendChild(rbRow);
 
   const sb = document.createElement('button');
@@ -3352,6 +3559,7 @@ function openComfySettings() {
     comfySettings.useProxy = document.getElementById('comfyUseProxy').checked;
     saveComfySettings();
     ov.remove();
+    updateRightPanel();
     showToast('✅ ComfyUI 设置已保存', 'success');
   };
   bd.appendChild(sb);
@@ -3373,7 +3581,7 @@ function openComfySettings() {
 // ============================================================
 
 const BACKUP_GROUPS = {
-  prompts: { keys: ['prompts_data','prompts_data_enabled','prompts_chance','prompts_locked','identity_regions','identity_genders','identity_age','identity_age_random','identity_region_random','identity_gender_random','identity_enabled','enrich_groups','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'], name: '提示词与类别' },
+  prompts: { keys: ['prompts_data','prompts_data_enabled','prompts_chance','prompts_locked','identity_regions','identity_genders','identity_en','identity_age','identity_age_random','identity_region_random','identity_gender_random','identity_enabled','enrich_groups','enrichCN','enrichEN','skinCN','skinEN','qualityCN','qualityEN'], name: '提示词与类别' },
   ai: { keys: ['ai_settings','ai_preset','ai_history'], name: 'AI 润色设置' },
   comfy: { keys: ['comfy_settings','comfy_workflows','comfy_gallery'], name: 'ComfyUI 设置' },
   server_config: { keys: ['port','host','comfy_url','html_file'], name: '服务配置', server: true }
@@ -3503,17 +3711,19 @@ function toggleTheme() {
     ? '<svg class="icon"><use href="#icon-sun"/></svg>'
     : '<svg class="icon"><use href="#icon-moon"/></svg>';
 }
-
 async function init() {
-  // Theme boot (DeepSeek light default, persisted)
+  // Theme boot（默认深色，可在右上角切换并持久化）
   try {
-    const t = (typeof storage !== 'undefined' && storage.getRaw('theme')) || 'light';
-    document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+    const t = (typeof storage !== 'undefined' && storage.getRaw('theme')) || 'dark';
+    const theme = t === 'light' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
     const _tb = document.getElementById('themeToggleBtn');
-    if (_tb) _tb.innerHTML = (t === 'dark')
+    if (_tb) _tb.innerHTML = (theme === 'dark')
       ? '<svg class="icon"><use href="#icon-sun"/></svg>'
       : '<svg class="icon"><use href="#icon-moon"/></svg>';
-  } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+  } catch (e) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
 
   if (window.location.origin && window.location.origin.startsWith('http')) {
     const loaded = await loadAllFromServer();
@@ -3551,13 +3761,765 @@ async function init() {
   renderIdentityBar();
   renderComfyGallery();
   resizePromptAreas();
+  updateRightPanel();
+  syncPolishLangUI();
+  syncComfyLangUI();
+  updatePromptStats();
+  renderGenQueue();
   // 手动输入中文（isTrusted=true 的真实键盘输入）后，英文框标记为「可能已过期」，并同步词条高亮
   const cnTa = document.getElementById('promptArea');
   if (cnTa) cnTa.addEventListener('input', (e) => { if (e.isTrusted) { markEnStale(true); refreshChipHighlights(); } });
+  const enTa = document.getElementById('promptEnArea');
+  if (enTa) enTa.addEventListener('input', (e) => {
+    if (!e.isTrusted) return;
+    _enManual = true;
+    markEnStale(false);
+    updatePromptStats();
+    const es = document.getElementById('enState');
+    if (es) es.textContent = '✎ 已手动编辑';
+  });
   setTimeout(() => checkComfyConnection(), 500);
+
 }
 
-// Keyboard shortcut
+// ============================================================
+// SECTION 19: New UI glue（三栏界面 / 固定种子 / 队列 / token）
+// ============================================================
+
+function _setText(id, txt) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = txt;
+}
+
+// —— 提示词统计：字数 / 英文词数 / token 估算 ——
+function updatePromptStats() {
+  const cnEl = document.getElementById('promptArea');
+  const enEl = document.getElementById('promptEnArea');
+  if (!cnEl || !enEl) return;
+  const cn = cnEl.value || '';
+  const en = enEl.value || '';
+  const cnChars = cn.replace(/\s/g, '').length;
+  const cjk = (cn.match(/[\u4e00-\u9fa5]/g) || []).length;
+  const words = (en.match(/[A-Za-z0-9][A-Za-z0-9'\-]*/g) || []).length;
+  // 粗估：中文 1 字 ≈ 1 token，英文 1 词 ≈ 0.75 token，其余字符 ≈ 0.5
+  const tokens = Math.max(0, Math.round(cjk * 1.0 + words * 0.75 + Math.max(0, cnChars - cjk) * 0.5));
+  _setText('tokenCount', tokens);
+  _setText('cnCount', cnChars + ' 字');
+  _setText('enWords', words + ' words');
+  const st = document.getElementById('cnStale');
+  if (st && _enManual) {
+    st.textContent = '✎ 英文已手动编辑';
+    st.className = '';
+    st.style.color = 'var(--orange)';
+  } else if (st && enEl.classList.contains('en-stale')) {
+    st.textContent = '⚠ 英文可能已过期';
+    st.className = '';
+    st.style.color = 'var(--orange)';
+  } else if (st) {
+    st.textContent = '✓ 中英已对齐';
+    st.className = 'ok-text';
+    st.style.color = '';
+  }
+}
+
+// —— 左侧词库搜索：按类别名或词条过滤 ——
+function applyCatSearch(q) {
+  const grid = document.getElementById('catGrid');
+  if (!grid) return;
+  const key = String(q || '').trim().toLowerCase();
+  grid.querySelectorAll('.cat-card').forEach(card => {
+    const name = (card.querySelector('.cat-name')?.textContent || '').toLowerCase();
+    const chips = Array.from(card.querySelectorAll('.cat-preview .chip'));
+    let visible = 0;
+    chips.forEach(ch => {
+      const t = (ch.dataset.cn || ch.textContent || '').toLowerCase();
+      const show = !key || name.includes(key) || t.includes(key);
+      ch.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    card.style.display = (!key || visible) ? '' : 'none';
+  });
+}
+
+// —— 锁定统计 ——
+function updateLockSummary() {
+  let total = 0;
+  if (typeof DATA !== 'undefined' && Array.isArray(DATA)) {
+    DATA.forEach(cat => {
+      const arr = promptsLocked[cat.name];
+      if (Array.isArray(arr)) total += arr.filter(cn => cat.items.some(it => it.cn === cn)).length;
+    });
+  }
+  _setText('lockCount', total);
+  _setText('lockFoot', total);
+  _setText('lockMeta', total);
+}
+
+// —— 快速选择人物身份（顶部预览 chips 弹出）——
+function _fillQuickSelect(sel, sourceSel) {
+  if (!sel || !sourceSel) return;
+  const current = sourceSel.value;
+  sel.innerHTML = Array.from(sourceSel.options)
+    .map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.textContent)}</option>`).join('');
+  if (current) sel.value = current;
+}
+
+function syncIdentityQuickUI() {
+  const age = document.getElementById('ageSlider');
+  const region = document.getElementById('regionSelect');
+  const gender = document.getElementById('genderSelect');
+  const qAge = document.getElementById('idAge');
+  if (!age || !region || !gender || !qAge) return;
+  const min = parseInt(age.min, 10) || 18;
+  const max = parseInt(age.max, 10) || 49;
+  qAge.min = min;
+  qAge.max = max;
+  qAge.value = age.value;
+  _setText('idAgeVal', age.value);
+  _fillQuickSelect(document.getElementById('idRegion'), region);
+  _fillQuickSelect(document.getElementById('idGender'), gender);
+  const setChk = (id, srcId) => {
+    const el = document.getElementById(id);
+    const src = document.getElementById(srcId);
+    if (el && src) el.checked = src.checked;
+  };
+  setChk('idAgeRandom', 'ageRandomToggle');
+  setChk('idRegionRandom', 'regionRandomToggle');
+  setChk('idGenderRandom', 'genderRandomToggle');
+  _setText('idPreview', identityEnabled ? getIdentityPrefix() : '身份已关闭');
+}
+
+function openIdentityPop(e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  const pop = document.getElementById('identityPop');
+  const btn = document.getElementById('identityPreviewBtn');
+  if (!pop || !btn) return;
+  const willShow = !pop.classList.contains('show');
+  syncIdentityQuickUI();
+  if (!willShow) { pop.classList.remove('show'); return; }
+  pop.classList.add('show');
+  positionIdentityPop();
+}
+
+function positionIdentityPop() {
+  const pop = document.getElementById('identityPop');
+  const btn = document.getElementById('identityPreviewBtn');
+  if (!pop || !btn) return;
+  const r = btn.getBoundingClientRect();
+  const w = 322;
+  pop.style.left = Math.max(10, Math.min(r.left, window.innerWidth - w - 12)) + 'px';
+  pop.style.top = (r.bottom + 8) + 'px';
+}
+
+function closeIdentityPop() {
+  const pop = document.getElementById('identityPop');
+  if (pop) pop.classList.remove('show');
+}
+
+// 拖动年龄滑杆时实时预览（不落盘）
+function onQuickIdentityInput() {
+  const qAge = document.getElementById('idAge');
+  const age = document.getElementById('ageSlider');
+  if (!qAge || !age) return;
+  _setText('idAgeVal', qAge.value);
+  age.value = qAge.value;
+  _setText('ageDisplay', qAge.value);
+  updateIdentityPreview();
+  _setText('idPreview', identityEnabled ? getIdentityPrefix() : '身份已关闭');
+}
+
+// 选择地区 / 性别 / 随机开关后同步到原有控件并保存
+function applyQuickIdentity() {
+  const age = document.getElementById('ageSlider');
+  const qAge = document.getElementById('idAge');
+  const region = document.getElementById('regionSelect');
+  const gender = document.getElementById('genderSelect');
+  if (!age || !region || !gender || !qAge) return;
+  age.value = qAge.value;
+  _setText('ageDisplay', qAge.value);
+  const qRegion = document.getElementById('idRegion');
+  const qGender = document.getElementById('idGender');
+  if (qRegion) region.value = qRegion.value;
+  if (qGender) gender.value = qGender.value;
+  const pair = [
+    ['ageRandomToggle', 'idAgeRandom'],
+    ['regionRandomToggle', 'idRegionRandom'],
+    ['genderRandomToggle', 'idGenderRandom']
+  ];
+  pair.forEach(([srcId, qId]) => {
+    const src = document.getElementById(srcId);
+    const q = document.getElementById(qId);
+    if (src && q) src.checked = q.checked;
+  });
+  saveIdentitySettings();
+  updateIdentityPreview();
+  syncIdentityQuickUI();
+}
+
+document.addEventListener('click', (e) => {
+  const pop = document.getElementById('identityPop');
+  if (!pop || !pop.classList.contains('show')) return;
+  if (pop.contains(e.target) || e.target.closest('#identityPreviewBtn')) return;
+  closeIdentityPop();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeIdentityPop();
+});
+window.addEventListener('resize', () => {
+  const pop = document.getElementById('identityPop');
+  if (pop && pop.classList.contains('show')) positionIdentityPop();
+});
+
+// —— 语言模式（AI 润色）——
+function syncPolishLangUI() {
+  const v = (aiSettings && aiSettings.polishLang) || 'both';
+  document.querySelectorAll('#langSeg button').forEach(b => b.classList.toggle('on', b.dataset.lang === v));
+}
+function setPolishLang(v) {
+  if (!aiSettings) return;
+  if (!['both', 'cn', 'en'].includes(v)) return;
+  aiSettings.polishLang = v;
+  saveAiSettings();
+  syncPolishLangUI();
+  const map = { both: '中 + 英', cn: '仅中文', en: '仅英文' };
+  showToast('✅ AI 润色语言：' + map[v], 'success');
+}
+
+// —— 发送语言（ComfyUI）——
+function syncComfyLangUI() {
+  const v = (comfySettings && comfySettings.language) || 'en';
+  document.querySelectorAll('#comfyLangSeg button').forEach(b => b.classList.toggle('on', b.dataset.lang === v));
+  const st = document.getElementById('enStatus');
+  if (st) st.textContent = '发送语言：' + (v === 'en' ? 'English' : '中文');
+}
+function setComfyLang(v) {
+  if (!comfySettings) return;
+  comfySettings.language = v === 'cn' ? 'cn' : 'en';
+  saveComfySettings();
+  syncComfyLangUI();
+  showToast('✅ 发送语言：' + (comfySettings.language === 'en' ? 'English' : '中文'), 'success');
+}
+
+// —— 右栏：工作流 / 尺寸 / 数量 / 种子 / 按钮 ——
+function renderComfyWorkflowSelect() {
+  const sel = document.getElementById('comfyWorkflowSelect');
+  if (!sel) return;
+  sel.innerHTML = '<option value="-1">未选择工作流</option>' +
+    comfyWorkflows.map((w, i) => `<option value="${i}">${escapeHtml(w.name)}</option>`).join('');
+  const idx = comfySettings.selectedWorkflow;
+  sel.value = (idx >= 0 && idx < comfyWorkflows.length) ? String(idx) : '-1';
+  _setText('wfCount', comfyWorkflows.length + ' 个已上传');
+}
+
+function renderSizeInputs() {
+  const w = document.getElementById('comfySizeW');
+  const h = document.getElementById('comfySizeH');
+  if (w) w.value = comfySettings.width;
+  if (h) h.value = comfySettings.height;
+  document.querySelectorAll('.size-presets button').forEach(b => {
+    b.classList.toggle('on',
+      parseInt(b.dataset.w, 10) === parseInt(comfySettings.width, 10) &&
+      parseInt(b.dataset.h, 10) === parseInt(comfySettings.height, 10));
+  });
+}
+
+function applySizePreset(w, h) {
+  const clamp = (v) => Math.max(1, parseInt(v, 10) || 1);
+  comfySettings.width = clamp(w);
+  comfySettings.height = clamp(h);
+  saveComfySettings();
+  updateRightPanel();
+}
+
+function onSizeInput() {
+  const wEl = document.getElementById('comfySizeW');
+  const hEl = document.getElementById('comfySizeH');
+  if (!wEl || !hEl) return;
+  const clamp = (v) => Math.max(1, parseInt(v, 10) || 1);
+  comfySettings.width = clamp(wEl.value);
+  comfySettings.height = clamp(hEl.value);
+  saveComfySettings();
+  updateRightPanel();
+}
+
+function onCountInput(field, val) {
+  let n = parseInt(val, 10) || 1;
+  n = Math.max(1, n);
+  comfySettings[field] = n;
+  saveComfySettings();
+  updateRightPanel();
+}
+
+function onWorkflowSelectChange(v) {
+  const idx = parseInt(v, 10);
+  if (isNaN(idx)) return;
+  selectComfyWorkflow(idx);
+  updateRightPanel();
+  if (idx >= 0 && comfyWorkflows[idx]) showToast('✅ 已选择工作流：' + comfyWorkflows[idx].name, 'success');
+}
+
+function onSizeChange(v) {
+  const m = String(v).split('x').map(Number);
+  if (!m[0] || !m[1]) return;
+  comfySettings.width = m[0];
+  comfySettings.height = m[1];
+  saveComfySettings();
+  updateRightPanel();
+}
+
+function stepCount(field, delta) {
+  let n = parseInt(comfySettings[field], 10) || 1;
+  n = Math.max(1, n + delta);
+  comfySettings[field] = n;
+  saveComfySettings();
+  updateRightPanel();
+}
+
+function updateSeedUI() {
+  const input = document.getElementById('comfySeed');
+  const lock = document.getElementById('comfySeedLock');
+  if (!input || !comfySettings) return;
+  input.value = comfySettings.seed || '';
+  if (lock) lock.checked = !!comfySettings.seedLock;
+  _setText('seedHint', comfySettings.seedLock ? '已锁定 · 每张相同' : '未锁定 · 每张随机');
+}
+
+function onSeedChange(v) {
+  let n = parseInt(String(v).replace(/[^\d]/g, ''), 10);
+  if (!n || n < 1) n = 1;
+  if (n > 2147483647) n = 2147483647;
+  comfySettings.seed = n;
+  saveComfySettings();
+  updateSeedUI();
+}
+
+function randomizeSeed() {
+  comfySettings.seed = Math.floor(Math.random() * 2147483647) + 1;
+  saveComfySettings();
+  updateSeedUI();
+  showToast('🎲 新种子：' + comfySettings.seed, 'success');
+}
+
+function onSeedLockChange(on) {
+  comfySettings.seedLock = !!on;
+  if (on && !comfySettings.seed) comfySettings.seed = Math.floor(Math.random() * 2147483647) + 1;
+  saveComfySettings();
+  updateSeedUI();
+  showToast(on ? '🔒 种子已锁定：每张图片使用同一种子' : '🔓 种子已解锁：每张图片随机', 'success');
+}
+
+function setStartButton(label) {
+  const btn = document.getElementById('comfyStartBtn');
+  if (!btn) return;
+  const total = (parseInt(comfySettings.randomCount, 10) || 1) * (parseInt(comfySettings.batchCount, 10) || 1);
+  const txt = label || '开始生图';
+  btn.innerHTML = `<svg class="icon"><use href="#icon-play"/></svg><span class="btn-label">${txt}</span><span class="start-count">· ${total} 张</span>`;
+}
+
+function updateRightPanel() {
+  if (typeof comfySettings === 'undefined' || !comfySettings) return;
+  renderComfyWorkflowSelect();
+  renderSizeInputs();
+  const randEl = document.getElementById('randCountInput');
+  const batchEl = document.getElementById('batchCountInput');
+  if (randEl) randEl.value = comfySettings.randomCount || 1;
+  if (batchEl) batchEl.value = comfySettings.batchCount || 1;
+  _setText('totalGenCount', (comfySettings.randomCount || 1) * (comfySettings.batchCount || 1));
+  updateSeedUI();
+  syncComfyLangUI();
+  loadShutdownUI();
+  if (!comfyQueueRunning) setStartButton('开始生图');
+  updateQueueSummary();
+}
+
+// —— 生成队列 ——
+let _genQueue = [];
+function buildGenQueue(total) {
+  _genQueue = Array.from({ length: total }, () => ({ state: 'wait', seed: '' }));
+  renderGenQueue();
+  updateQueueSummary();
+}
+function queueMark(index, state, seed) {
+  const q = _genQueue[index - 1];
+  if (!q) return;
+  q.state = state;
+  if (seed) q.seed = seed;
+  renderGenQueue();
+  updateQueueSummary();
+}
+function _queueGroupOf(i) {
+  const batch = Math.max(1, parseInt(comfySettings.batchCount, 10) || 1);
+  return Math.floor(i / batch) + 1;
+}
+function renderGenQueue() {
+  const box = document.getElementById('genQueue');
+  if (!box) return;
+  if (!_genQueue.length) {
+    box.innerHTML = '<div class="queue-empty">等待开始 · 选择工作流后点击「开始生图」</div>';
+    return;
+  }
+  // 数量很大时只渲染前 200 行，避免上千行 DOM 拖慢界面；状态仍按完整队列统计
+  const MAX_ROWS = 200;
+  const rows = _genQueue.slice(0, MAX_ROWS).map((q, i) => {
+    const cls = q.state === 'done' ? 'done' : (q.state === 'run' ? 'run' : (q.state === 'err' ? 'err' : ''));
+    const text = `第 ${_queueGroupOf(i)} 组 · seed ${q.seed || '待生成'}`;
+    const bar = q.state === 'run' ? '<span class="mini-bar"><i style="width:55%"></i></span>' : '';
+    const st = q.state === 'done' ? '完成' : (q.state === 'run' ? '生成中' : (q.state === 'err' ? '失败' : '排队'));
+    return `<div class="qrow ${cls}"><span class="qidx">#${String(i + 1).padStart(2, '0')}</span><span class="qtext">${text}</span>${bar}<span class="qstat ${cls}">${st}</span></div>`;
+  }).join('');
+  const more = _genQueue.length > MAX_ROWS
+    ? `<div class="queue-more">仅显示前 ${MAX_ROWS} 条，另有 ${_genQueue.length - MAX_ROWS} 条在后台执行…</div>`
+    : '';
+  box.innerHTML = rows + more;
+}
+function updateQueueSummary() {
+  const sub = document.getElementById('queueSub');
+  if (!sub) return;
+  const total = _genQueue.length;
+  if (!total) { sub.textContent = '未开始'; return; }
+  const done = _genQueue.filter(q => q.state === 'done').length;
+  sub.textContent = done >= total ? `${total} 张 · 已完成` : `${done}/${total} · ${comfyQueueRunning ? '进行中' : '等待'}`;
+}
+
+
+// ============================================================
+// SECTION 20: Restyled AI / ComfyUI settings modals
+// ============================================================
+
+function _aiTabBtn(label, tab, count) {
+  return `<button type="button" class="ai-tab" data-tab="${tab}">${label}${count != null ? ` <span class="ai-tab-count">${count}</span>` : ''}</button>`;
+}
+
+function openAiSettings(tab) {
+  tab = tab || 'model';
+  const old = document.getElementById('aiSettingsModal');
+  if (old) old.remove();
+
+  const providers = Object.entries(AI_PROVIDERS).map(([k, v]) =>
+    `<option value="${k}" ${k === aiSettings.provider ? 'selected' : ''}>${escapeHtml(v.name)}</option>`).join('');
+  const langRadio = (v, label, desc) => `
+    <label class="ai-lang ${aiSettings.polishLang === v ? 'on' : ''}">
+      <input type="radio" name="aiPolLang" value="${v}" ${aiSettings.polishLang === v ? 'checked' : ''}>
+      <span>${label}</span><em>${desc}</em>
+    </label>`;
+  const hist = aiHistory.map((r, i) => `
+    <div class="ai-hist-item">
+      <div class="ai-hist-time">#${i + 1} · ${new Date(r.timestamp).toLocaleString('zh-CN')}</div>
+      <div class="ai-hist-label">原始</div>
+      <div class="ai-hist-text">${escapeHtml(r.original || '')}</div>
+      ${r.originalEn ? `<div class="ai-hist-text en">${escapeHtml(r.originalEn)}</div>` : ''}
+      <div class="ai-hist-label pol">润色后</div>
+      <div class="ai-hist-text">${escapeHtml(r.polished || '')}</div>
+      <button type="button" class="ai-hist-copy" data-copy="${escapeHtml((r.polished || '').replace(/"/g, '&quot;'))}">复制结果</button>
+    </div>`).join('');
+
+  const ov = document.createElement('div');
+  ov.className = 'pm-overlay';
+  ov.id = 'aiSettingsModal';
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  ov.innerHTML = `
+    <div class="pm-panel ai-panel">
+      <div class="pm-header">
+        <h3><svg class="icon"><use href="#icon-robot"/></svg>AI 润色设置</h3>
+        <div class="ai-tabs">
+          ${_aiTabBtn('模型设置', 'model')}
+          ${_aiTabBtn('润色预设', 'preset')}
+          ${_aiTabBtn('历史记录', 'history', aiHistory.length)}
+        </div>
+        <button class="pm-close" type="button">✕ 关闭</button>
+      </div>
+      <div class="pm-body ai-body">
+        <section class="ai-pane" data-pane="model">
+          <div class="ai-form-grid">
+            <div>
+              <div class="ai-label">AI 厂商 <span>选择后自动填入默认地址</span></div>
+              <select id="aiProvider" class="ai-settings-select">${providers}</select>
+              <div class="ai-label">API 地址 <span>兼容 OpenAI 协议</span></div>
+              <input id="aiBaseUrl" class="ai-settings-input" type="url" value="${escapeHtml(aiSettings.baseUrl || '')}" placeholder="https://api.deepseek.com">
+              <div class="ai-label">API Key <span>仅保存在本地</span></div>
+              <input id="aiApiKey" class="ai-settings-input" type="password" value="${escapeHtml(aiSettings.apiKey || '')}" placeholder="sk-...（本地模型可留空）">
+              <div class="ai-label">模型名称 <span>可手动输入</span></div>
+              <div class="ai-inline">
+                <input id="aiModel" class="ai-settings-input" value="${escapeHtml(aiSettings.model || '')}" placeholder="deepseek-chat">
+                <button type="button" id="fetchModelsBtn" class="btn btn-sm">获取模型</button>
+              </div>
+            </div>
+            <div>
+              <div class="ai-label">润色语言 <span>与顶部工具栏同步</span></div>
+              ${langRadio('both', '中 + 英', '默认')}
+              ${langRadio('cn', '仅中文', '英文保持')}
+              ${langRadio('en', '仅英文', '最省 token')}
+              <div class="ai-status-box">
+                <div class="ai-status-line"><span class="dot ${aiSettings.baseUrl && aiSettings.model ? 'green' : ''}"></span>
+                  ${aiSettings.baseUrl && aiSettings.model ? '已配置 · ' + escapeHtml(aiSettings.model) : '尚未配置模型'}</div>
+                <div class="ai-status-note">测试连接会发送一条 max_tokens=10 的请求；异步 Pipeline 会在生图时后台润色下一组。</div>
+              </div>
+            </div>
+          </div>
+          <div class="ai-foot-actions">
+            <button type="button" id="aiTestBtn" class="btn btn-sm"><svg class="icon"><use href="#icon-plug"/></svg>测试连接</button>
+            <button type="button" id="aiSaveBtn" class="btn btn-sm btn-primary"><svg class="icon"><use href="#icon-check"/></svg>保存设置</button>
+          </div>
+        </section>
+
+        <section class="ai-pane" data-pane="preset" style="display:none">
+          <div class="ai-label">系统预设 <span>只在首次通信或通信中断时发送一次</span></div>
+          <textarea id="aiPresetTa" class="ai-preset-ta" spellcheck="false">${escapeHtml(aiPreset.preset || '')}</textarea>
+          <div class="ai-status-note" style="margin-top:8px">建议写清：角色、输出结构、语言、长度、禁止项。保存后立即生效。</div>
+          <div class="ai-foot-actions">
+            <button type="button" id="aiPresetSave" class="btn btn-sm btn-primary"><svg class="icon"><use href="#icon-check"/></svg>保存预设</button>
+          </div>
+        </section>
+
+        <section class="ai-pane" data-pane="history" style="display:none">
+          <div class="ai-hist-head"><span>最近 ${aiHistory.length} 次润色</span>
+            ${aiHistory.length ? '<button type="button" id="aiHistClear" class="btn btn-sm danger">清空历史</button>' : ''}
+          </div>
+          <div class="ai-hist-list">${hist || '<div class="pm-empty">暂无润色记录</div>'}</div>
+        </section>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+
+  const tabs = Array.from(ov.querySelectorAll('.ai-tab'));
+  const panes = Array.from(ov.querySelectorAll('.ai-pane'));
+  function showTab(name) {
+    tabs.forEach(t => t.classList.toggle('on', t.dataset.tab === name));
+    panes.forEach(p => { p.style.display = p.dataset.pane === name ? '' : 'none'; });
+  }
+  tabs.forEach(t => t.addEventListener('click', () => showTab(t.dataset.tab)));
+  showTab(tab);
+
+  ov.querySelector('.pm-close').onclick = () => ov.remove();
+
+  const ps = ov.querySelector('#aiProvider');
+  const uir = ov.querySelector('#aiBaseUrl');
+  const ki = ov.querySelector('#aiApiKey');
+  const mi = ov.querySelector('#aiModel');
+  ps.onchange = () => {
+    const p = AI_PROVIDERS[ps.value];
+    if (p) {
+      uir.value = p.baseUrl;
+      ki.classList.toggle('hidden', !p.online);
+    }
+  };
+  if (!(AI_PROVIDERS[aiSettings.provider] || {}).online) ki.classList.add('hidden');
+
+  ov.querySelector('#fetchModelsBtn').onclick = () => fetchModels(uir.value, ki.value, ps.value, mi);
+  ov.querySelector('#aiTestBtn').onclick = () => testConnection(uir.value, ki.value, ps.value, mi.value);
+
+  ov.querySelector('#aiSaveBtn').onclick = () => {
+    aiSettings.provider = ps.value;
+    aiSettings.baseUrl = uir.value.replace(/\/+$/, '');
+    aiSettings.apiKey = ki.value;
+    aiSettings.model = mi.value;
+    const checked = ov.querySelector('input[name="aiPolLang"]:checked');
+    if (checked) aiSettings.polishLang = checked.value;
+    saveAiSettings();
+    updateAiStatus();
+    syncPolishLangUI();
+    ov.remove();
+    showToast('✅ AI 设置已保存', 'success');
+  };
+
+  ov.querySelector('#aiPresetSave').onclick = () => {
+    aiPreset.preset = ov.querySelector('#aiPresetTa').value;
+    saveAiPreset();
+    ov.remove();
+    showToast('✅ 预设已保存', 'success');
+  };
+
+  const clr = ov.querySelector('#aiHistClear');
+  if (clr) clr.onclick = async () => {
+    if (await uiConfirm('确定清空所有润色记录？', { danger: true, okText: '清空' })) {
+      aiHistory = [];
+      saveAiHistory();
+      ov.remove();
+      showToast('🗑️ 已清空历史', 'success');
+    }
+  };
+  ov.querySelectorAll('.ai-hist-copy').forEach(b => {
+    b.onclick = () => {
+      navigator.clipboard.writeText(b.dataset.copy || '').then(
+        () => showToast('✅ 已复制润色结果', 'success'),
+        () => showToast('⚠️ 复制失败', 'error')
+      );
+    };
+  });
+}
+
+function openAiPreset() { openAiSettings('preset'); }
+function openAiHistory() { openAiSettings('history'); }
+
+function openComfySettings() {
+  const old = document.getElementById('comfyModal');
+  if (old) old.remove();
+  const ov = document.createElement('div');
+  ov.className = 'pm-overlay';
+  ov.id = 'comfyModal';
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  ov.innerHTML = `
+    <div class="pm-panel comfy-panel">
+      <div class="pm-header">
+        <h3><svg class="icon"><use href="#icon-image"/></svg>ComfyUI 设置</h3>
+        <span class="pm-header-sub">地址 · 工作流 · 输出</span>
+        <span class="comfy-head-status" id="comfyHeadStatus"></span>
+        <button class="pm-close" type="button">✕ 关闭</button>
+      </div>
+      <div class="pm-body comfy-body">
+        <div class="comfy-col">
+          <section class="comfy-block">
+            <div class="comfy-block-title">连接</div>
+            <div class="ai-label">ComfyUI 地址</div>
+            <div class="comfy-inline">
+              <input id="comfyUrl" class="ai-settings-input" value="${escapeHtml(comfySettings.url || '')}" placeholder="http://127.0.0.1:8188">
+              <button type="button" id="comfyDetectBtn" class="btn btn-sm">检测</button>
+            </div>
+            <div class="comfy-status-line" id="comfyStat">状态：${comfyConnected ? '🟢 已连接' : '🔴 未连接'}</div>
+            <label class="comfy-check"><input type="checkbox" id="comfyUseProxy" ${comfySettings.useProxy ? 'checked' : ''}>使用代理（同源转发，解决跨域）</label>
+            <div class="comfy-hint" id="comfyProxyHint"></div>
+          </section>
+
+          <section class="comfy-block">
+            <div class="comfy-block-title">输出设置</div>
+            <div class="ai-label">尺寸（px）</div>
+            <div class="comfy-dim-row">
+              <input id="comfyWidth" type="number" step="1" value="${comfySettings.width}">
+              <span>×</span>
+              <input id="comfyHeight" type="number" step="1" value="${comfySettings.height}">
+              <button type="button" id="comfyDetectSizeBtn" class="btn btn-sm" title="从工作流读取">自动检测</button>
+            </div>
+            <div class="comfy-two">
+              <div><div class="ai-label">提示词数量</div><input id="comfyRandCnt" class="ai-settings-input" type="number" step="1" value="${comfySettings.randomCount}"></div>
+              <div><div class="ai-label">生图批次</div><input id="comfyBatchCnt" class="ai-settings-input" type="number" step="1" value="${comfySettings.batchCount}"></div>
+            </div>
+            <div class="ai-label">发送语言</div>
+            <label class="comfy-check"><input type="radio" name="comfyLang" value="en" ${comfySettings.language === 'en' ? 'checked' : ''}>English 英文</label>
+            <label class="comfy-check"><input type="radio" name="comfyLang" value="cn" ${comfySettings.language === 'cn' ? 'checked' : ''}>中文 Chinese</label>
+            <label class="comfy-check"><input type="checkbox" id="comfyShutdown" ${comfySettings.autoShutdown ? 'checked' : ''}>生图完成后自动关机</label>
+          </section>
+        </div>
+
+        <div class="comfy-col">
+          <section class="comfy-block comfy-wf-block">
+            <div class="comfy-block-title">工作流 <span id="comfyWfCount">${comfyWorkflows.length} 个</span></div>
+            <div id="comfyWfList" class="comfy-wf-list"></div>
+            <button type="button" id="comfyUploadBtn" class="btn btn-sm comfy-upload-btn"><svg class="icon"><use href="#icon-upload"/></svg>上传工作流 JSON（推荐 API 格式）</button>
+            <div class="comfy-node-info" id="comfyNodeInfo">📂 请先选择工作流</div>
+          </section>
+          <section class="comfy-block">
+            <div class="comfy-block-title">说明</div>
+            <div class="comfy-li">· 提示词数量 × 生图批次 = 本次总张数</div>
+            <div class="comfy-li">· 优先使用 ComfyUI 的 Save (API Format) 导出</div>
+            <div class="comfy-li">· 普通界面格式会自动转换，节点 ID 重新映射</div>
+            <div class="comfy-li">· 生成时可在主界面查看进度与实时画廊</div>
+          </section>
+        </div>
+      </div>
+      <div class="pm-footer">
+        <span class="pm-foot-note">保存到本地 data/comfy_settings.json</span>
+        <button type="button" id="comfySaveBtn" class="btn btn-sm btn-primary"><svg class="icon"><use href="#icon-check"/></svg>保存设置</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+
+  const cUrl = ov.querySelector('#comfyUrl');
+  const cStat = ov.querySelector('#comfyStat');
+  const wfList = ov.querySelector('#comfyWfList');
+  const nodeInfo = ov.querySelector('#comfyNodeInfo');
+  const headStatus = ov.querySelector('#comfyHeadStatus');
+  const proxyHint = ov.querySelector('#comfyProxyHint');
+
+  function syncStatus() {
+    cStat.innerHTML = '状态：' + (comfyConnected ? '🟢 已连接' : '🔴 未连接');
+    headStatus.innerHTML = `<span class="dot ${comfyConnected ? 'green' : 'red'}"></span>${comfyConnected ? '已连接' : '未连接'}`;
+  }
+  syncStatus();
+
+  proxyHint.textContent = (window.location.origin && window.location.origin.startsWith('http'))
+    ? '代理地址：' + window.location.origin + '/comfy-proxy'
+    : '需通过 HTTP 服务打开页面才可使用代理';
+
+  function renderWfList() {
+    wfList.innerHTML = '';
+    if (!comfyWorkflows.length) {
+      wfList.innerHTML = '<div class="pm-empty" style="padding:14px">暂无工作流，请上传</div>';
+      return;
+    }
+    comfyWorkflows.forEach((wf, i) => {
+      const row = document.createElement('div');
+      row.className = 'comfy-wf-item' + (i === comfySettings.selectedWorkflow ? ' active' : '');
+      row.innerHTML = `<svg class="icon"><use href="#icon-doc"/></svg><span class="wf-name">${escapeHtml(wf.name)}</span>` +
+        (i === comfySettings.selectedWorkflow ? '<span class="wf-active">✓ 当前</span>' : '') +
+        `<span class="wf-actions"><button type="button" data-act="use" data-i="${i}">选择</button><button type="button" class="wf-del" data-act="del" data-i="${i}">删除</button></span>`;
+      wfList.appendChild(row);
+    });
+    wfList.querySelectorAll('button[data-act]').forEach(btn => {
+      btn.onclick = async () => {
+        const i = parseInt(btn.dataset.i, 10);
+        if (btn.dataset.act === 'use') {
+          selectComfyWorkflow(i);
+          ov.querySelector('#comfyWidth').value = comfySettings.width;
+          ov.querySelector('#comfyHeight').value = comfySettings.height;
+          renderWfList();
+          updateNodeInfo();
+          updateRightPanel();
+        } else {
+          await deleteComfyWorkflow(i);
+          renderWfList();
+          ov.querySelector('#comfyWidth').value = comfySettings.width;
+          ov.querySelector('#comfyHeight').value = comfySettings.height;
+          updateNodeInfo();
+        }
+      };
+    });
+    ov.querySelector('#comfyWfCount').textContent = comfyWorkflows.length + ' 个';
+  }
+
+  function updateNodeInfo() {
+    if (comfySettings.selectedWorkflow >= 0 && comfySettings.selectedWorkflow < comfyWorkflows.length) {
+      const nodes = findPromptNodes(comfyWorkflows[comfySettings.selectedWorkflow].data);
+      nodeInfo.textContent = `🔍 已检测 ${nodes.length} 个 CLIPTextEncode 节点，将替换第 1 个的提示词`;
+    } else {
+      nodeInfo.textContent = '📂 请先选择工作流';
+    }
+  }
+
+  renderWfList();
+  updateNodeInfo();
+
+  ov.querySelector('#comfyUploadBtn').onclick = () => document.getElementById('comfyFileInput').click();
+  ov.querySelector('#comfyDetectSizeBtn').onclick = () => {
+    autoDetectSize();
+    ov.querySelector('#comfyWidth').value = comfySettings.width;
+    ov.querySelector('#comfyHeight').value = comfySettings.height;
+    updateNodeInfo();
+  };
+  ov.querySelector('#comfyDetectBtn').onclick = async () => {
+    comfySettings.url = cUrl.value.replace(/\/+$/, '');
+    saveComfySettings();
+    await checkComfyConnection();
+    syncStatus();
+  };
+  ov.querySelector('#comfySaveBtn').onclick = () => {
+    comfySettings.url = cUrl.value.replace(/\/+$/, '');
+    comfySettings.width = Math.max(1, parseInt(ov.querySelector('#comfyWidth').value, 10) || 512);
+    comfySettings.height = Math.max(1, parseInt(ov.querySelector('#comfyHeight').value, 10) || 512);
+    comfySettings.randomCount = Math.max(1, parseInt(ov.querySelector('#comfyRandCnt').value, 10) || 1);
+    comfySettings.batchCount = Math.max(1, parseInt(ov.querySelector('#comfyBatchCnt').value, 10) || 1);
+    comfySettings.useProxy = ov.querySelector('#comfyUseProxy').checked;
+    const lang = ov.querySelector('input[name="comfyLang"]:checked');
+    if (lang) comfySettings.language = lang.value;
+    comfySettings.autoShutdown = ov.querySelector('#comfyShutdown').checked;
+    saveComfySettings();
+    loadShutdownUI();
+    ov.remove();
+    updateRightPanel();
+    showToast('✅ ComfyUI 设置已保存', 'success');
+  };
+  ov.querySelector('.pm-close').onclick = () => ov.remove();
+}
+
 // 焦点在输入框/文本域时不触发，避免误把正在手动编辑的提示词覆盖掉
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,10 +7,8 @@
 <title>提示词生成器 · Prompt Generator</title>
 <link rel="stylesheet" href="css/style.css">
 <script>
-// Pre-paint theme to avoid flash
-// 注意：storage.setRaw 存的是裸字符串 "dark"/"light"，JSON.parse 会抛错，
-// 解析失败时直接用原值，否则深色模式刷新页面会闪回浅色。
-(function(){try{var t=localStorage.getItem('pg_v2_theme');if(t){try{t=JSON.parse(t);}catch(_){/* 裸字符串直接用 */}}document.documentElement.setAttribute('data-theme', t==='dark'?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}})();
+// Pre-paint theme to avoid flash（默认深色，可在右上角切换并记住）
+(function(){try{var t=localStorage.getItem('pg_v2_theme');if(t){try{t=JSON.parse(t);}catch(_){/* 裸字符串直接用 */}}document.documentElement.setAttribute('data-theme', t==='light'?'light':'dark');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();
 </script>
 </head>
 <body>
@@ -39,222 +37,448 @@
   <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
   <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></symbol>
   <symbol id="icon-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></symbol>
+  <symbol id="icon-unlock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 017.4-2"/></symbol>
+  <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="icon-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="icon-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+  <symbol id="icon-x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+  <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/></symbol>
+  <symbol id="icon-eye" viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="icon-code" viewBox="0 0 24 24"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></symbol>
+  <symbol id="icon-layers" viewBox="0 0 24 24"><path d="M12 2l10 6-10 6L2 8z"/><path d="M2 14l10 6 10-6M2 11l10 6 10-6"/></symbol>
+  <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></symbol>
+  <symbol id="icon-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+  <symbol id="icon-wand" viewBox="0 0 24 24"><path d="M15 4V2M15 22v-2M8 9l-6 6 4 4 6-6"/><path d="M19 8l2-2M5 4l2 2M21 14l-2 2M9 19l-2 2M15 6l3 3-3 3-3-3z"/></symbol>
 </svg>
 
-<div class="container">
-  <!-- Topbar -->
-  <div class="topbar">
+<div class="app" id="app">
+  <!-- ================= Topbar ================= -->
+  <header class="topbar">
     <div class="brand">
-      <svg class="icon brand-icon"><use href="#icon-sparkles"/></svg>
+      <div class="logo"><svg class="icon brand-icon"><use href="#icon-sparkles"/></svg></div>
       <div>
-        <div class="brand-text">提示词生成器</div>
-        <div class="brand-sub">随机组合 · AI 润色 · ComfyUI 生图</div>
+        <div class="brand-row"><span class="brand-text">Prompt Generator</span></div>
+        <div class="brand-sub">提示词生成器 · 随机组合 / AI 润色 / ComfyUI 生图</div>
       </div>
     </div>
-    <button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="切换主题">
-      <svg class="icon"><use href="#icon-moon"/></svg>
-    </button>
-  </div>
+    <div class="top-right">
+      <span id="comfyStatus" class="ai-indicator">检测中…</span>
+      <button class="icon-btn" onclick="openComfySettings()" title="ComfyUI 设置">
+        <svg class="icon"><use href="#icon-settings"/></svg>
+      </button>
+      <button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="切换主题">
+        <svg class="icon"><use href="#icon-moon"/></svg>
+      </button>
+    </div>
+  </header>
 
-  <div class="top-section">
-    <!-- CN Prompt -->
-    <div class="prompt-row">
-      <span class="plabel"><svg class="icon"><use href="#icon-globe"/></svg> 中文</span>
-      <textarea id="promptArea" placeholder="点击「随机」生成提示词，或手动输入..." oninput="autoResizeTextarea(this)" data-min-height="180"></textarea>
-      <div class="btn-group">
-        <button class="btn btn-random" onclick="randomPrompt()"><svg class="icon"><use href="#icon-dice"/></svg> 随机</button>
-        <button class="btn btn-optimize" onclick="optimizePrompt()"><svg class="icon"><use href="#icon-sparkles"/></svg> 优化</button>
-        <button class="btn btn-ai" onclick="aiPolish()" id="aiPolishBtn" title="使用 AI 润色提示词"><svg class="icon"><use href="#icon-robot"/></svg> AI</button>
-        <button class="btn btn-copy" onclick="copyPrompt('promptArea')"><svg class="icon"><use href="#icon-copy"/></svg> 复制</button>
-        <button class="btn btn-clear" onclick="clearPrompt()">清空</button>
-      </div>
-    </div>
-    <!-- EN Prompt -->
-    <div class="prompt-row en-row">
-      <span class="plabel"><svg class="icon"><use href="#icon-text"/></svg> English</span>
-      <textarea id="promptEnArea" readonly placeholder="英文提示词将自动同步显示..." oninput="autoResizeTextarea(this)" data-min-height="50"></textarea>
-      <div class="btn-group">
-        <button class="btn btn-copy" onclick="copyPrompt('promptEnArea')" style="font-size:11px;padding:5px 10px;"><svg class="icon"><use href="#icon-copy"/></svg> 复制</button>
-      </div>
-    </div>
-    <div class="bottom-bar">
-      <span class="hint"><svg class="icon"><use href="#icon-bulb"/></svg> 点击下方词条 · 中英文自动同步</span>
-      <span id="toast" class="toast"></span>
-    </div>
-  </div>
-
-  <!-- AI Control Bar -->
-  <div class="ai-bar">
-    <div class="ai-toggle-group">
-      <svg class="icon ai-icon"><use href="#icon-robot"/></svg>
-      <span class="ai-label">AI 润色</span>
+  <!-- ================= Toolbar ================= -->
+  <div class="toolbar">
+    <div class="tog-label">
+      <svg class="icon"><use href="#icon-robot"/></svg>
+      <span>AI 润色</span>
       <label class="toggle"><input type="checkbox" id="aiToggle" onchange="updateAiStatus()"><span class="slider"></span></label>
       <span id="aiStatus" class="ai-indicator">未配置</span>
     </div>
-    <button class="btn-ai-sm" onclick="openAiSettings()"><svg class="icon"><use href="#icon-settings"/></svg> 设置</button>
-    <button class="btn-ai-sm" onclick="openAiPreset()"><svg class="icon"><use href="#icon-doc"/></svg> 预设</button>
-    <button class="btn-ai-sm" onclick="openAiHistory()"><svg class="icon"><use href="#icon-history"/></svg> 历史</button>
+    <div class="seg" id="langSeg" title="AI 润色语言">
+      <button type="button" data-lang="both" class="on" onclick="setPolishLang('both')">中 + 英</button>
+      <button type="button" data-lang="cn" onclick="setPolishLang('cn')">仅中文</button>
+      <button type="button" data-lang="en" onclick="setPolishLang('en')">仅英文</button>
+    </div>
+    <button class="ghost-btn" onclick="openAiSettings()"><svg class="icon"><use href="#icon-settings"/></svg>设置</button>
+    <button class="ghost-btn" onclick="openAiPreset()"><svg class="icon"><use href="#icon-doc"/></svg>预设</button>
+    <button class="ghost-btn" onclick="openAiHistory()"><svg class="icon"><use href="#icon-history"/></svg>历史</button>
+    <span class="vr"></span>
+    <div class="tog-label identity-bar" id="identityBar">
+      <svg class="icon"><use href="#icon-user"/></svg>
+      <span>人物身份</span>
+      <label class="toggle"><input type="checkbox" id="identityEnabledToggle" checked onchange="toggleIdentityEnabled(this.checked)"><span class="slider"></span></label>
+      <button class="identity-preview" id="identityPreviewBtn" type="button" onclick="openIdentityPop(event)" title="点击选择年龄 / 地区 / 性别">
+        <span id="identityPreview">已打开</span>
+        <svg class="icon"><use href="#icon-chevron"/></svg>
+      </button>
+    </div>
+    <div class="toolbar-right">
+      <span class="lock-summary"><svg class="icon"><use href="#icon-lock"/></svg>已锁定 <b id="lockCount">0</b> 条</span>
+      <button class="ghost-btn bordered" onclick="toggleMgmtPanel()"><svg class="icon"><use href="#icon-settings"/></svg>管理词库</button>
+      <button class="ghost-btn bordered" onclick="exportAllData()"><svg class="icon"><use href="#icon-save"/></svg>数据备份</button>
+    </div>
   </div>
 
-  <!-- ComfyUI Bar -->
-  <div class="comfy-bar">
-    <span class="comfy-label"><svg class="icon"><use href="#icon-image"/></svg> ComfyUI</span>
-    <span id="comfyStatus" class="ai-indicator">---</span>
-    <button class="btn-comfy-sm" onclick="checkComfyConnection();showToast('⏳ 检测中...','success')"><svg class="icon"><use href="#icon-plug"/></svg> 检测连接</button>
-    <button class="btn-comfy-sm" onclick="openComfySettings()"><svg class="icon"><use href="#icon-settings"/></svg> 设置</button>
-    <input type="file" id="comfyFileInput" accept=".json" style="display:none" onchange="handleWorkflowUpload(event)">
-    <button class="btn-comfy-sm" onclick="document.getElementById('comfyFileInput').click()"><svg class="icon"><use href="#icon-upload"/></svg> 上传工作流</button>
-    <button class="btn-comfy-go" id="comfyStartBtn" onclick="startComfyGeneration()"><svg class="icon"><use href="#icon-play"/></svg> 开始生图</button>
-    <button class="btn-comfy-sm" id="comfyStopBtn" onclick="stopComfyGeneration()" style="display:none;border-color:var(--red);color:var(--red)"><svg class="icon"><use href="#icon-stop"/></svg> 中止</button>
-    <span id="comfyProgress" class="comfy-progress"></span>
-    <!-- 定时关机 -->
-    <svg class="icon" style="width:14px;height:14px;color:var(--text2);margin-left:6px;"><use href="#icon-clock"/></svg>
-    <label class="toggle" title="生图完成后自动关机">
-      <input type="checkbox" id="shutdownToggle" onchange="saveShutdownSettings()"><span class="slider"></span>
-    </label>
-    <input type="number" id="shutdownMinutes" value="5" min="0" max="120"
-      style="width:40px;padding:3px 6px;background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;color:var(--text);font-size:11px;text-align:center;outline:none;"
-      onchange="saveShutdownSettings()">
-    <span style="font-size:10px;color:var(--text2);white-space:nowrap;">分后关机</span>
-  </div>
-  <!-- Progress Bar -->
-  <div class="comfy-progress-wrap" id="comfyProgressWrap">
-    <div class="comfy-progress-track"><div class="comfy-progress-fill" id="comfyProgressFill" style="width:0%"></div></div>
-    <div class="comfy-progress-info" id="comfyProgressInfo"><span>0/0</span><span>⏱ 00:00</span><span class="pp-status" id="comfyProgressStatus">等待中</span></div>
+  <!-- ================= Workspace ================= -->
+  <div class="workspace">
+    <!-- Left: library -->
+    <aside class="left">
+      <div class="left-head">
+        <div><span class="panel-title">词库</span><span class="panel-sub" id="catSummary">6 类 · 48 条</span></div>
+        <div class="left-head-actions">
+          <button class="icon-btn sm" onclick="toggleMgmtPanel()" title="新建类别 / 批量添加 / 管理">
+            <svg class="icon"><use href="#icon-settings"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="searchbox">
+        <svg class="icon"><use href="#icon-search"/></svg>
+        <input id="catSearch" type="text" placeholder="搜索词条 / 类别" oninput="applyCatSearch(this.value)" autocomplete="off">
+        <span class="kbd">/</span>
+      </div>
+      <div class="left-cats" id="leftCats">
+        <div class="cat-grid" id="catGrid"></div>
+      </div>
+      <div class="left-foot" id="footerInfo">
+        <span>共 <b id="totalItems">0</b> 条 · 锁定 <b id="lockFoot">0</b></span>
+        <button class="link accent" onclick="toggleMgmtPanel()">管理类别 →</button>
+      </div>
+    </aside>
+
+    <!-- Center: prompt -->
+    <section class="center">
+      <div class="prompt-head">
+        <div><span class="panel-title">提示词</span><span class="panel-sub">点击词条追加 · 中英文自动同步</span></div>
+        <div class="head-right">
+          <span class="tokens"><svg class="icon"><use href="#icon-code"/></svg>≈ <b id="tokenCount">0</b> tokens</span>
+          <button class="link" onclick="clearPrompt()">清空</button>
+        </div>
+      </div>
+
+      <div class="center-scroll">
+      <div class="card cn">
+        <div class="card-head">
+          <span class="card-label"><svg class="icon"><use href="#icon-globe"/></svg>中文<span class="lang-tag">CN</span></span>
+          <span class="card-tools"><span id="cnCount">0 字</span><span class="dot-sep">·</span><button class="copy-btn" onclick="copyPrompt('promptArea')"><svg class="icon"><use href="#icon-copy"/></svg>复制</button></span>
+        </div>
+        <div class="prompt-area-wrap">
+          <textarea id="promptArea" placeholder="点击「随机组合」生成提示词，或手动输入..." oninput="autoResizeTextarea(this)" data-min-height="180" spellcheck="false"></textarea>
+        </div>
+        <div class="card-foot"><span>可手动编辑 · 编辑后英文需重新同步</span><span id="cnStale" class="ok-text">✓ 中英已对齐</span></div>
+      </div>
+
+      <div class="card en">
+        <div class="card-head">
+          <span class="card-label"><svg class="icon"><use href="#icon-text"/></svg>English<span class="lang-tag">EN</span></span>
+          <span class="card-tools"><span id="enWords">0 words</span><span class="dot-sep">·</span><button class="copy-btn" onclick="copyPrompt('promptEnArea')"><svg class="icon"><use href="#icon-copy"/></svg>复制</button></span>
+        </div>
+        <div class="prompt-area-wrap">
+          <textarea id="promptEnArea" placeholder="可手动输入 / 编辑英文提示词，或由中文自动映射…" oninput="autoResizeTextarea(this)" data-min-height="70" spellcheck="false"></textarea>
+        </div>
+        <div class="card-foot"><span id="enState">可手动编辑 · 默认由中文自动映射</span><span id="enStatus">发送语言：English</span></div>
+      </div>
+
+      <div class="center-tip">
+        <svg class="icon"><use href="#icon-bulb"/></svg><b>小提示</b> · 点击左侧词条即可追加；锁定的词条每次随机必出；AI 润色需先在「设置」中配置模型。
+      </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" onclick="randomPrompt()"><svg class="icon"><use href="#icon-dice"/></svg>随机组合<span class="kbd">⌘↵</span></button>
+        <button class="btn" onclick="optimizePrompt()"><svg class="icon"><use href="#icon-wand"/></svg>模板优化</button>
+        <button class="btn" id="aiPolishBtn" onclick="aiPolish()"><svg class="icon"><use href="#icon-robot"/></svg><span class="btn-label">AI 润色</span></button>
+        <button class="btn clear" onclick="clearPrompt()">清空</button>
+      </div>
+      <span id="toast" class="toast"></span>
+    </section>
+
+    <!-- Right: generation -->
+    <aside class="right">
+      <div class="right-head">
+        <span class="panel-title">生图队列</span>
+        <span class="status-txt" id="comfyQueueState"><span class="dot green"></span>就绪</span>
+      </div>
+
+      <div class="field">
+        <div class="setting-label">工作流 <span id="wfCount">0 个已上传</span></div>
+        <div class="select-row">
+          <select id="comfyWorkflowSelect" class="select" onchange="onWorkflowSelectChange(this.value)">
+            <option value="-1">未选择工作流</option>
+          </select>
+          <button class="icon-btn" onclick="document.getElementById('comfyFileInput').click()" title="上传工作流 JSON">
+            <svg class="icon"><use href="#icon-upload"/></svg>
+          </button>
+          <button class="icon-btn" onclick="openComfySettings()" title="ComfyUI 设置">
+            <svg class="icon"><use href="#icon-settings"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="setting-label">尺寸 <span>宽 × 高（px）</span></div>
+        <div class="size-inputs">
+          <label class="size-field"><span>宽</span>
+            <input id="comfySizeW" type="number" step="1" value="512" onchange="onSizeInput()" title="宽度">
+          </label>
+          <span class="size-x">×</span>
+          <label class="size-field"><span>高</span>
+            <input id="comfySizeH" type="number" step="1" value="512" onchange="onSizeInput()" title="高度">
+          </label>
+        </div>
+        <div class="size-presets">
+          <button type="button" data-w="512" data-h="768" title="512 × 768" onclick="applySizePreset(512,768)">512×768</button>
+          <button type="button" data-w="912" data-h="512" title="912 × 512" onclick="applySizePreset(912,512)">912×512</button>
+          <button type="button" data-w="768" data-h="1152" title="768 × 1152" onclick="applySizePreset(768,1152)">768×1152</button>
+          <button type="button" data-w="1360" data-h="768" title="1360 × 768" onclick="applySizePreset(1360,768)">1360×768</button>
+          <button type="button" data-w="1920" data-h="1080" title="1920 × 1080" onclick="applySizePreset(1920,1080)">1920×1080</button>
+          <button type="button" data-w="2560" data-h="1440" title="2560 × 1440" onclick="applySizePreset(2560,1440)">2560×1440</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="grid2">
+          <div>
+            <div class="setting-label">提示词数量</div>
+            <div class="stepper">
+              <button type="button" onclick="stepCount('randomCount',-1)">−</button>
+              <input id="randCountInput" class="step-input" type="number" step="1" value="1" onchange="onCountInput('randomCount',this.value)">
+              <button type="button" onclick="stepCount('randomCount',1)">+</button>
+            </div>
+          </div>
+          <div>
+            <div class="setting-label">生图批次</div>
+            <div class="stepper">
+              <button type="button" onclick="stepCount('batchCount',-1)">−</button>
+              <input id="batchCountInput" class="step-input" type="number" step="1" value="1" onchange="onCountInput('batchCount',this.value)">
+              <button type="button" onclick="stepCount('batchCount',1)">+</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="setting-label">随机种子 <span id="seedHint">未锁定 · 每张随机</span></div>
+        <div class="seed-row">
+          <input id="comfySeed" class="seed-input" type="number" min="1" max="2147483647" inputmode="numeric" value="" onchange="onSeedChange(this.value)" title="种子值">
+          <button class="icon-btn" onclick="randomizeSeed()" title="换一个种子">
+            <svg class="icon"><use href="#icon-dice"/></svg>
+          </button>
+          <label class="seed-lock" title="锁定后所有图片使用同一种子">
+            <input type="checkbox" id="comfySeedLock" onchange="onSeedLockChange(this.checked)">
+            <svg class="icon"><use href="#icon-lock"/></svg>锁定
+          </label>
+        </div>
+      </div>
+
+      <div class="row-toggle">发送语言
+        <div class="seg mini" id="comfyLangSeg">
+          <button type="button" data-lang="en" class="on" onclick="setComfyLang('en')">English</button>
+          <button type="button" data-lang="cn" onclick="setComfyLang('cn')">中文</button>
+        </div>
+      </div>
+      <div class="row-toggle">完成后定时关机
+        <span class="inline">
+          <label class="toggle sm"><input type="checkbox" id="shutdownToggle" onchange="saveShutdownSettings()"><span class="slider"></span></label>
+          <input id="shutdownMinutes" class="minutes-input" type="number" value="5" min="0" max="120" onchange="saveShutdownSettings()">
+          <span class="muted">分钟后</span>
+        </span>
+      </div>
+
+      <div class="start-row">
+        <button class="start" id="comfyStartBtn" onclick="startComfyGeneration()">
+          <svg class="icon"><use href="#icon-play"/></svg><span class="btn-label">开始生图</span>
+        </button>
+        <button class="stop-btn" id="comfyStopBtn" onclick="stopComfyGeneration()" style="display:none">
+          <svg class="icon"><use href="#icon-stop"/></svg>中止
+        </button>
+      </div>
+
+      <div class="progress-card" id="comfyProgressWrap">
+        <div class="pbar"><div class="pfill" id="comfyProgressFill"></div></div>
+        <div class="pmeta" id="comfyProgressInfo"><span>0/0</span><span>⏱ --:--</span><span class="pp-status">等待中</span></div>
+      </div>
+
+      <div class="queue-head"><span>本次任务</span><span class="sub" id="queueSub">未开始</span></div>
+      <div class="queue" id="genQueue"></div>
+
+      <div class="hint"><b>就绪</b> · 选择工作流并连接 ComfyUI 后即可开始。<br>「提示词数量 × 批次」= 本次总张数，种子可锁定。</div>
+    </aside>
   </div>
 
-  <!-- Identity Bar -->
-  <div class="identity-bar" id="identityBar">
-    <div class="identity-master">
-      <span class="im-label">人物身份</span>
-      <label class="toggle" title="关闭后提示词不再添加年龄/地区/性别">
-        <input type="checkbox" id="identityEnabledToggle" checked onchange="toggleIdentityEnabled(this.checked)">
-        <span class="slider"></span>
-      </label>
-    </div>
-    <div class="identity-fields" id="identityFields">
-    <div class="age-group">
-      <span class="ilabel">年龄</span>
-      <input type="range" id="ageSlider" min="18" max="49" value="25" oninput="updateAgeDisplay()">
-      <span class="age-display" id="ageDisplay">25</span>
-      <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text2);cursor:pointer;margin-left:4px;">
-        <input type="checkbox" id="ageRandomToggle" onchange="saveIdentitySettings()" style="accent-color:var(--accent);cursor:pointer;">
-        随机
-      </label>
-    </div>
-    <div class="selector-group">
-      <span class="ilabel">地区</span>
-      <select id="regionSelect" onchange="updateIdentityPreview()"></select>
-      <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text2);cursor:pointer;margin-left:2px;">
-        <input type="checkbox" id="regionRandomToggle" onchange="saveIdentitySettings()" style="accent-color:var(--accent);cursor:pointer;">
-        随机
-      </label>
-    </div>
-    <div class="selector-group">
-      <span class="ilabel">性别</span>
-      <select id="genderSelect" onchange="updateIdentityPreview()"></select>
-      <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text2);cursor:pointer;margin-left:2px;">
-        <input type="checkbox" id="genderRandomToggle" onchange="saveIdentitySettings()" style="accent-color:var(--accent);cursor:pointer;">
-        随机
-      </label>
-    </div>
-    </div><!-- /identity-fields -->
-    <span class="ipreview" id="identityPreview">中国，25岁</span>
-  </div>
-
-  <!-- Categories -->
-  <div class="cat-grid" id="catGrid"></div>
-  <div class="footer-info" id="footerInfo">
-    <span>共 <span id="totalItems">0</span> 条提示词 · 开启的类别参与随机选择 · 🔒 锁定的提示词每次必出</span>
-    <span style="flex:1;"></span>
-    <button class="btn btn-mgmt" onclick="toggleMgmtPanel()" style="display:inline-flex;align-items:center;gap:5px;background:var(--surface);color:var(--text2);border:1px solid var(--border-strong);font-size:11px;padding:5px 12px;border-radius:999px;cursor:pointer;font-family:inherit;"><svg class="icon" style="width:12px;height:12px;"><use href="#icon-settings"/></svg> 管理类别与提示词</button>
-  </div>
-  <div class="mgmt-panel" id="mgmtPanel" style="display:none;margin-top:8px;">
-    <div class="mgmt-row">
-      <input type="text" id="newCatInput" class="mgmt-input" placeholder="输入新类别名称" onkeydown="if(event.key==='Enter')addCategory()">
-      <button class="btn btn-sm btn-add" onclick="addCategory()">添加类别</button>
-    </div>
-    <div class="mgmt-row" style="align-items:flex-start">
-      <textarea id="batchCatInput" class="mgmt-textarea" rows="2" placeholder="批量添加类别：每行一个类别名称"></textarea>
-      <button class="btn btn-sm btn-add" onclick="batchAddCategories()" style="margin-top:0">批量添加</button>
-    </div>
-    <div class="mgmt-row" style="align-items:flex-start">
-      <select id="batchPromptCatSelect" class="mgmt-input" style="flex:0 0 130px;min-width:0;cursor:pointer;" title="选择提示词要添加到的目标类别"></select>
-      <textarea id="batchPromptInput" class="mgmt-textarea" rows="2" placeholder="批量添加（每行一条：中文，English）&#10;示例：&#10;卧室，bedroom&#10;白色连衣裙，white dress"></textarea>
-      <button class="btn btn-sm btn-add" onclick="batchAddPromptsToCategory()" style="margin-top:0">批量添加提示词</button>
-    </div>
-    <div style="font-size:10px;color:var(--text2);margin:-3px 0 8px;line-height:1.7;">
-      💡 提示词可以让 AI 帮你生成，给 AI 的要求示例：<br>
-      「请生成 20 条〔类别名〕类提示词，每行一条，格式为：<b>中文，English</b>。中文 2~10 个字；英文用简洁的绘画关键词，同一含义有多个写法时用 / 分隔。不要编号、不要任何解释说明，直接输出列表。」<br>
-      把 AI 的回复整体复制粘贴到上面的输入框，点「批量添加提示词」即可（会自动跳过与当前类别重复的条目）。
-    </div>
-    <div class="mgmt-row">
-      <button class="btn btn-sm btn-add" onclick="semanticSortCategories()" style="font-size:10px;">按语义排序类别</button>
-      <span style="font-size:10px;color:var(--text2);">按「画质→主体→外观→服装→动作→场景→氛围→构图」排列，随机拼接更连贯；也可用卡片上的 ↑↓ 微调</span>
-    </div>
-    <div style="border-top:1px solid var(--border);margin:12px 0 10px;"></div>
-    <div style="font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px;"><svg class="icon" style="width:14px;height:14px;color:var(--accent-2);"><use href="#icon-user"/></svg> 身份管理</div>
-    <div class="mgmt-row">
-    <span style="font-size:12px;color:var(--text2);min-width:50px;">年龄范围</span>
-    <input type="number" id="ageMinInput" class="mgmt-input" style="width:70px;" min="1" max="99" placeholder="最小">
-    <span style="color:var(--text2);font-size:12px;">~</span>
-    <input type="number" id="ageMaxInput" class="mgmt-input" style="width:70px;" min="1" max="99" placeholder="最大">
-    <button class="btn btn-sm btn-add" onclick="saveAgeRange()" style="font-size:10px;">保存</button>
-    </div>
-    <div class="mgmt-row">
-    <span style="font-size:12px;color:var(--text2);min-width:50px;">地区</span>
-    <input type="text" id="newRegionInput" class="mgmt-input" placeholder="输入新地区" onkeydown="if(event.key==='Enter')addRegion()">
-    <button class="btn btn-sm btn-add" onclick="addRegion()" style="font-size:10px;">添加地区</button>
-    </div>
-    <div id="regionList" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
-    <div class="mgmt-row">
-    <span style="font-size:12px;color:var(--text2);min-width:50px;">性别</span>
-    <input type="text" id="newGenderInput" class="mgmt-input" placeholder="输入新性别" onkeydown="if(event.key==='Enter')addGender()">
-    <button class="btn btn-sm btn-add" onclick="addGender()" style="font-size:10px;">添加性别</button>
-    </div>
-    <div id="genderList" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;"></div>
-    <!-- 润色模板管理 -->
-    <div style="border-top:1px solid var(--border);margin:12px 0 10px;"></div>
-    <div style="font-size:13px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px;"><svg class="icon" style="width:14px;height:14px;color:var(--accent-2);"><use href="#icon-doc"/></svg> 润色模板</div>
-    <div style="font-size:10px;color:var(--text2);margin-bottom:8px;">用于 optimizePrompt 润色功能，默认 3 组（画面/皮肤/画质），可自由增删</div>
-    <div id="enrichMgmtContainer"></div>
-  </div><!-- end mgmtPanel -->
-
-  <!-- Image Gallery -->
-  <div class="gallery-section" id="gallerySection">
+  <!-- ================= Gallery ================= -->
+  <section class="gallery-section" id="gallerySection">
     <div class="gallery-header">
-      <span class="gallery-title"><svg class="icon"><use href="#icon-image"/></svg> 生图画廊</span>
+      <span class="gallery-title"><svg class="icon"><use href="#icon-image"/></svg>生图画廊</span>
       <span class="gallery-count" id="galleryCount">0 张</span>
-      <button class="gallery-clear-btn" onclick="clearComfyGallery()"><svg class="icon" style="width:12px;height:12px;"><use href="#icon-trash"/></svg> 清空</button>
+      <span class="gallery-sub">瀑布流 · 点击图片查看提示词与种子</span>
+      <button class="gallery-clear-btn" onclick="clearComfyGallery()"><svg class="icon"><use href="#icon-trash"/></svg>清空</button>
     </div>
     <div class="gallery-grid" id="galleryGrid"></div>
     <div class="gallery-empty" id="galleryEmpty">暂无图片，开始生图后自动显示</div>
-  </div>
+  </section>
 
-  <!-- Bottom Data Backup -->
-  <div style="text-align:center;margin-top:16px;padding:12px 0;border-top:1px solid var(--border)">
-    <span style="font-size:11px;color:var(--text2);margin-right:10px;display:inline-flex;align-items:center;gap:5px;"><svg class="icon" style="width:13px;height:13px;"><use href="#icon-save"/></svg> 数据备份</span>
-    <button class="btn btn-sm" style="background:var(--accent);color:#fff;border:none;font-size:11px;padding:6px 14px;font-family:inherit;cursor:pointer;border-radius:999px" onclick="exportAllData()">提示词生成器导出</button>
-    <button class="btn btn-sm" style="background:var(--surface);color:var(--text);border:1px solid var(--border-strong);font-size:11px;padding:6px 14px;font-family:inherit;cursor:pointer;border-radius:999px;margin-left:6px" onclick="document.getElementById('importDataInputBottom').click()">提示词生成器导入</button>
-    <input type="file" id="importDataInputBottom" accept=".json" style="display:none" onchange="importAllData(event)">
-  </div>
+  <!-- ================= Footer ================= -->
+  <footer class="footer">
+    <svg class="icon"><use href="#icon-save"/></svg><span>数据备份</span>
+    <button class="mini-btn" onclick="exportAllData()">导出</button>
+    <button class="mini-btn" onclick="document.getElementById('importDataInputBottom').click()">导入</button>
+    <span class="footer-note">提示词 · AI · ComfyUI · 服务配置 可分别导入导出</span>
+    <span class="spacer"></span>
+    <span class="autosave"><span class="dot green"></span>已自动保存</span>
+    <span class="sep"></span>
+    <span>Ctrl/⌘ + Enter 随机</span>
+    <span class="sep"></span>
+    <span>v3.1 · 本地运行</span>
+  </footer>
 </div>
 
-<!-- Image Modal -->
-<div class="img-modal" id="imgModal" role="dialog" aria-modal="true" aria-label="图片预览" onclick="closeImgModal()">
-  <span class="img-modal-close" onclick="event.stopPropagation();closeImgModal()">&times;</span>
-  <div style="position:relative;display:inline-block;max-width:92vw;max-height:90vh;" onclick="event.stopPropagation()">
-    <img class="img-modal-content" id="imgModalImg" src="" alt="enlarged image" style="display:block;">
-    <div class="img-modal-info" id="imgModalInfo">
-      <div class="imi-prompt"><span class="imi-label">提示词:</span> <span id="imiPromptText"></span></div>
-      <div><span class="imi-label">Seed:</span> <span class="imi-seed" id="imiSeedText"></span></div>
-      <div class="imi-actions">
-        <button onclick="downloadCurrentModalImg()"><svg class="icon" style="width:12px;height:12px;"><use href="#icon-download"/></svg> 下载</button>
-        <button class="imi-del" onclick="deleteCurrentModalImg()"><svg class="icon" style="width:12px;height:12px;"><use href="#icon-trash"/></svg> 删除</button>
+<!-- ================= Quick identity popover ================= -->
+<div class="identity-pop" id="identityPop">
+  <div class="ip-head">
+    <span class="ip-title"><svg class="icon"><use href="#icon-user"/></svg>人物身份</span>
+    <button type="button" class="ip-more" onclick="closeIdentityPop();toggleMgmtPanel()">更多设置 →</button>
+  </div>
+  <div class="ip-row">
+    <span class="ip-label">年龄</span>
+    <input type="range" id="idAge" min="18" max="49" value="25" oninput="onQuickIdentityInput()" onchange="applyQuickIdentity()">
+    <b class="ip-val" id="idAgeVal">25</b>
+    <label class="ip-chk"><input type="checkbox" id="idAgeRandom" onchange="applyQuickIdentity()">随机</label>
+  </div>
+  <div class="ip-row">
+    <span class="ip-label">地区</span>
+    <select id="idRegion" class="ip-select" onchange="applyQuickIdentity()"></select>
+    <label class="ip-chk"><input type="checkbox" id="idRegionRandom" onchange="applyQuickIdentity()">随机</label>
+  </div>
+  <div class="ip-row">
+    <span class="ip-label">性别</span>
+    <select id="idGender" class="ip-select" onchange="applyQuickIdentity()"></select>
+    <label class="ip-chk"><input type="checkbox" id="idGenderRandom" onchange="applyQuickIdentity()">随机</label>
+  </div>
+  <div class="ip-preview">当前：<b id="idPreview">—</b></div>
+  <div class="ip-tip">点击「更多设置」可管理地区 / 性别的中英文对照。</div>
+</div>
+
+<!-- ================= Management modal ================= -->
+<div class="pm-overlay mgmt-overlay" id="mgmtOverlay" style="display:none" onclick="if(event.target===this)toggleMgmtPanel()">
+  <div class="pm-panel mgmt-panel">
+    <div class="pm-header">
+      <h3><svg class="icon"><use href="#icon-settings"/></svg>管理类别与提示词</h3>
+      <span class="pm-header-sub">类别 · 出现率 · 锁定 · 身份 · 润色模板</span>
+      <span class="mgmt-badge">自动保存</span>
+      <button class="pm-close" onclick="toggleMgmtPanel()" title="关闭">✕ 关闭</button>
+    </div>
+    <div class="pm-body" id="mgmtPanel" style="display:none">
+      <div class="mgmt-content">
+        <section class="mgmt-block">
+          <div class="mgmt-block-head"><span>类别管理</span><span class="mgmt-sub" id="mgmtCatSummary">6 类</span></div>
+          <div class="mgmt-row">
+            <input type="text" id="newCatInput" class="mgmt-input" placeholder="输入新类别名称，例如「服装 · OUTFIT」" onkeydown="if(event.key==='Enter')addCategory()">
+            <button class="btn btn-sm btn-primary" onclick="addCategory()"><svg class="icon"><use href="#icon-plus"/></svg>添加类别</button>
+            <button class="btn btn-sm" onclick="semanticSortCategories()"><svg class="icon"><use href="#icon-refresh"/></svg>按语义排序</button>
+          </div>
+          <div class="mgmt-note">出现率 = 随机组合时该类别被抽中的概率，100% 每次必出；锁定的词条每次必出，该类别不再随机补抽。↑↓ 调整拼接顺序。</div>
+          <div class="mgmt-cat-host" id="mgmtCatHost"></div>
+        </section>
+
+        <section class="mgmt-block">
+          <div class="mgmt-block-head"><span>身份管理</span><span class="mgmt-sub">中英文自动映射</span></div>
+          <div class="identity-fields" id="identityFields">
+            <div class="mgmt-row identity-range-row">
+              <span class="ilabel">年龄范围</span>
+              <input type="number" id="ageMinInput" class="mgmt-input w70" min="1" max="99" placeholder="最小">
+              <span class="range-sep">~</span>
+              <input type="number" id="ageMaxInput" class="mgmt-input w70" min="1" max="99" placeholder="最大">
+              <button class="btn btn-sm" onclick="saveAgeRange()">保存</button>
+              <label class="chk"><input type="checkbox" id="ageRandomToggle" onchange="saveIdentitySettings()">随机</label>
+            </div>
+            <div class="mgmt-row">
+              <span class="ilabel">年龄</span>
+              <input type="range" id="ageSlider" min="18" max="49" value="25" oninput="updateAgeDisplay()">
+              <span class="age-display" id="ageDisplay">25</span>
+              <span class="mgmt-hint-inline">岁（滑杆用于本次预览）</span>
+            </div>
+            <div class="mgmt-row">
+              <span class="ilabel">地区</span>
+              <select id="regionSelect" class="mgmt-select" onchange="updateIdentityPreview()"></select>
+              <label class="chk"><input type="checkbox" id="regionRandomToggle" onchange="saveIdentitySettings()">随机</label>
+            </div>
+            <div class="mgmt-row">
+              <span class="ilabel">性别</span>
+              <select id="genderSelect" class="mgmt-select" onchange="updateIdentityPreview()"></select>
+              <label class="chk"><input type="checkbox" id="genderRandomToggle" onchange="saveIdentitySettings()">随机</label>
+            </div>
+            <div class="mgmt-row">
+              <span class="ilabel">新增地区</span>
+              <input type="text" id="newRegionInput" class="mgmt-input" placeholder="中文，如「北欧」" onkeydown="if(event.key==='Enter')addRegion()">
+              <input type="text" id="newRegionEnInput" class="mgmt-input" placeholder="English（可选）" onkeydown="if(event.key==='Enter')addRegion()">
+              <button class="btn btn-sm" onclick="addRegion()">添加地区</button>
+            </div>
+            <div id="regionList" class="tag-list"></div>
+            <div class="mgmt-row">
+              <span class="ilabel">新增性别</span>
+              <input type="text" id="newGenderInput" class="mgmt-input" placeholder="中文，如「其他」" onkeydown="if(event.key==='Enter')addGender()">
+              <input type="text" id="newGenderEnInput" class="mgmt-input" placeholder="English（可选）" onkeydown="if(event.key==='Enter')addGender()">
+              <button class="btn btn-sm" onclick="addGender()">添加性别</button>
+            </div>
+            <div id="genderList" class="tag-list"></div>
+            <div class="identity-preview-line">当前预览：<b id="mgmtIdentityPreview">—</b></div>
+          </div>
+        </section>
+
+        <section class="mgmt-block">
+          <div class="mgmt-block-head"><span>润色模板</span><span class="mgmt-sub">用于「模板优化」· 可分组启停</span></div>
+          <div class="mgmt-note">画面描述 → 最前，画质描述 → 最后，其余组按顺序接在正文后；标记「人物相关」的组会在人物身份关闭时跳过。</div>
+          <div id="enrichMgmtContainer"></div>
+        </section>
       </div>
+    </div>
+    <div class="pm-footer">
+      <span class="pm-foot-note">所有修改自动保存到本地 JSON</span>
+      <button class="pm-btn" onclick="toggleMgmtPanel()">关闭</button>
     </div>
   </div>
 </div>
+
+<!-- Image modal -->
+<div class="img-modal" id="imgModal" role="dialog" aria-modal="true" aria-label="图片预览" onclick="closeImgModal()">
+  <div class="img-modal-inner" onclick="event.stopPropagation()">
+    <div class="img-modal-head">
+      <span class="imh-title"><svg class="icon"><use href="#icon-image"/></svg>图片详情</span>
+      <span class="imh-badge" id="imgModalBadge">#03</span>
+      <span class="imh-tag" id="imgModalTag">生成</span>
+      <span class="imh-sub" id="imgModalSub">生图画廊 · 第 3 / 4 张</span>
+      <button class="imh-close" type="button" onclick="closeImgModal()">✕ 关闭</button>
+    </div>
+
+    <div class="img-modal-stage">
+      <img class="img-modal-content" id="imgModalImg" src="" alt="enlarged image">
+      <span class="im-stage-badge" id="imgModalStageBadge">#03 · 原图</span>
+      <span class="im-stage-size" id="imiSizeOverlay">—</span>
+    </div>
+
+    <div class="img-modal-info" id="imgModalInfo">
+      <div class="imi-section">
+        <div class="imi-h">提示词 · 中文 <span class="imi-source" id="imiSource">ComfyUI</span></div>
+        <div class="imi-text" id="imiPromptCn"></div>
+        <div class="imi-h">English</div>
+        <div class="imi-text en" id="imiPromptEn"></div>
+      </div>
+
+      <div class="imi-meta">
+        <div><span>SEED</span><b id="imiSeedText">—</b></div>
+        <div><span>尺寸</span><b id="imiSizeText">—</b></div>
+        <div><span>工作流</span><b id="imiWorkflowText">—</b></div>
+        <div><span>耗时</span><b id="imiDurationText">—</b></div>
+        <div><span>生成时间</span><b id="imiTimeText">—</b></div>
+        <div><span>批次</span><b id="imiBatchText">—</b></div>
+      </div>
+
+      <div class="imi-params">
+        <div class="dp-row"><span>采样器</span><b id="imiSamplerText">—</b></div>
+        <div class="dp-row"><span>步数 / CFG</span><b id="imiStepsText">—</b></div>
+        <div class="dp-row"><span>模型</span><b id="imiModelText">—</b></div>
+      </div>
+
+      <div class="imi-actions">
+        <button class="imi-primary" onclick="downloadCurrentModalImg()"><svg class="icon"><use href="#icon-download"/></svg>下载原图</button>
+        <button onclick="copyModalPrompt()"><svg class="icon"><use href="#icon-copy"/></svg>复制提示词</button>
+        <button class="imi-del" onclick="deleteCurrentModalImg()"><svg class="icon"><use href="#icon-trash"/></svg>删除</button>
+      </div>
+      <div class="imi-note">删除前会二次确认；下载保存为原始尺寸 PNG。← → 可切换上一张 / 下一张。</div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="comfyFileInput" accept=".json" style="display:none" onchange="handleWorkflowUpload(event)">
+<input type="file" id="importDataInputBottom" accept=".json" style="display:none" onchange="importAllData(event)">
 
 <script src="js/storage.js"></script>
 <script src="js/app.js"></script>
