@@ -147,6 +147,7 @@ html[data-theme="light"] .badge-demo{color:#4a42c4}
 .dot.red{background:var(--red);box-shadow:0 0 0 3px rgba(248,113,113,.12)}
 .dot.amber{background:var(--orange);box-shadow:0 0 0 3px rgba(242,182,74,.13)}
 .dot.cyan{background:var(--cyan);box-shadow:0 0 0 3px rgba(53,200,232,.14);animation:dotPulse 1.4s ease-in-out infinite}
+.dot.yellow{background:#ffd84d;box-shadow:0 0 0 3px rgba(255,216,77,.20);animation:dotPulse 1.4s ease-in-out infinite}
 @keyframes dotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.78)}}
 .icon-btn{
   width:32px;height:32px;border-radius:9px;border:1px solid var(--line);
@@ -526,6 +527,8 @@ html[data-theme="light"] #promptEnArea:focus{background:rgba(77,107,254,.035)}
 .qstat.done{color:var(--green)}
 .qstat.run{color:var(--cyan)}
 .qstat.err{color:var(--red)}
+.qrow.stop{opacity:.55}
+.qstat.stop{color:var(--text3)}
 .mini-bar{width:34px;height:3px;background:var(--track);border-radius:999px;overflow:hidden;flex:none}
 .mini-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#6c5cff,#35c8e8);transition:width .3s}
 .hint{

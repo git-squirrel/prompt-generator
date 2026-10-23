@@ -2420,7 +2420,7 @@ function setQueueStatus(state) {
   if (!qs) return;
   const map = {
     ready: ['green', '就绪'],
-    running: ['cyan', '生成中'],
+    running: ['yellow', '生成中'],
     error: ['red', '出错'],
     stopped: ['amber', '已中止'],
     disconnected: ['red', '未连接']
@@ -3045,7 +3045,9 @@ let _comfyApiPrefix = '';
 async function _pollComfyUI(pid, steps) {
   const startTime = Date.now();
   for (let i = 1; i <= 300; i++) {
+    if (comfyStopped) { const e = new Error('已中止'); e.stopped = true; throw e; }
     await new Promise(r => setTimeout(r, 1000));
+    if (comfyStopped) { const e = new Error('已中止'); e.stopped = true; throw e; }
     const elapsed = (Date.now() - startTime) / 1000;
     const url = getComfyBaseUrl() + _comfyApiPrefix + '/history/' + pid;
     try {
@@ -3066,6 +3068,7 @@ async function _pollComfyUI(pid, steps) {
         }
       }
     } catch (e) {
+      if (e && e.stopped) throw e;
       if (i < 5) continue;
       throw e;
     }
@@ -3175,6 +3178,8 @@ async function startComfyGeneration() {
   btn.disabled = true;
   setStartButton('生成中…');
   stopBtn.style.display = 'inline-flex';
+  stopBtn.disabled = false;
+  stopBtn.innerHTML = '<svg class="icon"><use href="#icon-stop"/></svg>中止';
   comfyStopped = false;
   comfyQueueRunning = true;
   let genFailed = false;
@@ -3284,12 +3289,19 @@ async function startComfyGeneration() {
       triggerShutdown(secs);
     }
   } catch (e) {
-    genFailed = true;
-    setQueueStatus('error');
-    showToast('❌ 生图失败: ' + e.message.slice(0, 150), 'error');
-    _updateProgress(`❌ ${e.message.slice(0, 50)}`, completed, total, (Date.now() - startTime) / 1000);
-    _genQueue.forEach(q => { if (q.state === 'run') q.state = 'err'; });
-    renderGenQueue();
+    if (e && e.stopped) {
+      setQueueStatus('stopped');
+      _genQueue.forEach(q => { if (q.state === 'run' || q.state === 'queue') q.state = 'stop'; });
+      renderGenQueue();
+      _updateProgress('⏹ 已中止', completed, total, (Date.now() - startTime) / 1000);
+    } else {
+      genFailed = true;
+      setQueueStatus('error');
+      showToast('❌ 生图失败: ' + e.message.slice(0, 150), 'error');
+      _updateProgress(`❌ ${e.message.slice(0, 50)}`, completed, total, (Date.now() - startTime) / 1000);
+      _genQueue.forEach(q => { if (q.state === 'run') q.state = 'err'; });
+      renderGenQueue();
+    }
   } finally {
     btn.disabled = false;
     setStartButton(comfyStopped ? '重新开始' : '开始生图');
@@ -3305,17 +3317,28 @@ async function startComfyGeneration() {
 }
 
 function stopComfyGeneration() {
+  if (!comfyQueueRunning) return;
   comfyStopped = true;
+  setQueueStatus('stopped');
+  const stopBtn = document.getElementById('comfyStopBtn');
+  if (stopBtn) {
+    stopBtn.disabled = true;
+    stopBtn.innerHTML = '<svg class="icon"><use href="#icon-stop"/></svg>中止中…';
+  }
   showToast('⏹ 正在中止生图...', 'success');
   // 同时通知 ComfyUI 中断当前任务并清空队列，否则后台仍会继续跑完已提交的任务
   try {
     const base = getComfyBaseUrl();
-    fetch(base + '/interrupt', { method: 'POST' }).catch(() => {});
-    fetch(base + '/queue', {
+    const prefix = _comfyApiPrefix || '';
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2500);
+    fetch(base + prefix + '/interrupt', { method: 'POST', signal: ctrl.signal }).catch(() => {});
+    fetch(base + prefix + '/queue', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clear: true })
-    }).catch(() => {});
+      body: JSON.stringify({ clear: true }),
+      signal: ctrl.signal
+    }).catch(() => {}).finally(() => clearTimeout(timer));
   } catch (e) { /* 忽略，前端状态已置为中止 */ }
 }
 
@@ -4161,10 +4184,10 @@ function renderGenQueue() {
   // 数量很大时只渲染前 200 行，避免上千行 DOM 拖慢界面；状态仍按完整队列统计
   const MAX_ROWS = 200;
   const rows = _genQueue.slice(0, MAX_ROWS).map((q, i) => {
-    const cls = q.state === 'done' ? 'done' : (q.state === 'run' ? 'run' : (q.state === 'err' ? 'err' : ''));
+    const cls = q.state === 'done' ? 'done' : (q.state === 'run' ? 'run' : (q.state === 'err' ? 'err' : (q.state === 'stop' ? 'stop' : '')));
     const text = `第 ${_queueGroupOf(i)} 组 · seed ${q.seed || '待生成'}`;
     const bar = q.state === 'run' ? '<span class="mini-bar"><i style="width:55%"></i></span>' : '';
-    const st = q.state === 'done' ? '完成' : (q.state === 'run' ? '生成中' : (q.state === 'err' ? '失败' : '排队'));
+    const st = q.state === 'done' ? '完成' : (q.state === 'run' ? '生成中' : (q.state === 'err' ? '失败' : (q.state === 'stop' ? '已中止' : '排队')));
     return `<div class="qrow ${cls}"><span class="qidx">#${String(i + 1).padStart(2, '0')}</span><span class="qtext">${text}</span>${bar}<span class="qstat ${cls}">${st}</span></div>`;
   }).join('');
   const more = _genQueue.length > MAX_ROWS
